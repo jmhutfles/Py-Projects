@@ -68,6 +68,21 @@ GlideRatio["Glide Ratio"] = GlideRatio["Glide Ratio"].rolling(window=10).mean()
 
 
 
+#Export CSV Readable by Flysight Viewer
+ExportPath = filedialog.asksaveasfilename(
+        defaultextension=".csv",
+        filetype=[("CSV files", "*.csv")],
+        title="Save CSV File as"
+)
+if ExportPath:
+    JumperCorrected.to_csv(ExportPath, index=False, header=False)
+    print(f"File saved to: {ExportPath}")
+else:
+    print("Save cancelled.")
+
+
+
+
 
 
 #Plot the two datasets
