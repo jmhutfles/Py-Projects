@@ -28,8 +28,12 @@ JumperRaw = pd.read_csv(PathJumperRaw, names=DataHeaders, skiprows = 7)
 
 
 #Collect User Input about Height Wind Pack was Dropped & Ground Level
-DropAlt = float(input("What Altitude MSL was the WindPack Dropped? (m) : "))
-GroundAlt = float(input("What Altitude is ground level MSL? (m) : "))
+DropAlt = float(input("What Altitude AGL was the WindPack Dropped? (ft) : "))
+GroundAlt = float(input("What Altitude is ground level MSL? (ft) : "))
+DropAlt = DropAlt + GroundAlt
+#Conversions
+GroundAlt = (GroundAlt + 20) *.3048
+DropAlt = DropAlt * .3048
 
 
 
@@ -81,6 +85,12 @@ else:
     print("Save cancelled.")
 
 
+#Create Glide Ratio Data File With Altitude in ft AGL for Graphing
+GlideAGLft = GlideRatio.copy()
+GlideAGLft["Altitude MSL"] = GlideAGLft["Altitude MSL"] - GroundAlt
+GlideAGLft["Altitude MSL"] = GlideAGLft["Altitude MSL"] * 3.28084
+GlideAGLft = GlideAGLft.rename(columns={"Altitude MSL": "Altitude AGL (ft)"})
+
 
 
 
@@ -89,7 +99,7 @@ else:
 plt.figure()
 plt.scatter(filteredWindPack["Altitude MSL"], filteredWindPack["North Velocity"], label="North Wind", color = "r")
 plt.plot(filteredWindPack["Altitude MSL"], North(filteredWindPack["Altitude MSL"]), label = "Polynomial Fit", color = "g")
-plt.xlabel("Altitude MSL (M)")
+plt.xlabel("Altitude MSL (m)")
 plt.ylabel("Velocity (m/s)")
 plt.title("North Wind Velocity form WindPack")
 plt.legend()
@@ -97,14 +107,20 @@ plt.legend()
 plt.figure()
 plt.scatter(filteredWindPack["Altitude MSL"], filteredWindPack["East Velocity"], label="East Wind", color = "r")
 plt.plot(filteredWindPack["Altitude MSL"], East(filteredWindPack["Altitude MSL"]), label = "Polynomial Fit", color = "g")
-plt.xlabel("Altitude MSL (M)")
+plt.xlabel("Altitude MSL (m)")
 plt.ylabel("Velocity (m/s)")
 plt.title("East Wind Velocity form WindPack")
 plt.legend()
 
+# plt.figure()
+# plt.plot(GlideRatio["Altitude MSL"], GlideRatio["Glide Ratio"], label = "Glide Ratio", color = "r")
+# plt.xlabel("Altitude MSL")
+# plt.ylabel("Glide Ratio")
+# plt.title("Glide Ratio vs Altitude")
+
 plt.figure()
-plt.plot(GlideRatio["Altitude MSL"], GlideRatio["Glide Ratio"], label = "Glide Ratio", color = "r")
-plt.xlabel("Altitude MSL")
+plt.plot(GlideAGLft["Altitude AGL (ft)"], GlideAGLft["Glide Ratio"], label = "Glide Ratio", color = "r")
+plt.xlabel("Altitude AGL (ft)")
 plt.ylabel("Glide Ratio")
 plt.title("Glide Ratio vs Altitude")
 
