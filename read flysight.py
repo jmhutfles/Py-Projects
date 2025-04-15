@@ -8,6 +8,7 @@ from scipy.optimize import curve_fit
 import math
 import tkinter as tk
 from tkinter import filedialog
+from scipy.interpolate import UnivariateSpline
 
 #Dev note: msl alt range for this data is 895 475
 
@@ -48,10 +49,26 @@ filteredJumperRaw = JumperRaw[mask]
 
 
 #Creating a function that describes wind as a function of altitude
-Eastcoeff = np.polyfit(filteredWindPack["Altitude MSL"], filteredWindPack["East Velocity"], deg=10)
-East = np.poly1d(Eastcoeff)
-Northcoeff = np.polyfit(filteredWindPack["Altitude MSL"], filteredWindPack["North Velocity"], deg=10)
-North = np.poly1d(Northcoeff)
+# Eastcoeff = np.polyfit(filteredWindPack["Altitude MSL"], filteredWindPack["East Velocity"], deg=10)
+# East = np.poly1d(Eastcoeff)
+# Northcoeff = np.polyfit(filteredWindPack["Altitude MSL"], filteredWindPack["North Velocity"], deg=10)
+# North = np.poly1d(Northcoeff)
+#Clean Up data to allow spline fit to work
+filteredWindPack = filteredWindPack.sort_values("Altitude MSL")
+filteredWindPack = filteredWindPack.dropna(subset=["Altitude MSL", "East Velocity", "North Velocity"])
+East = UnivariateSpline(
+    filteredWindPack["Altitude MSL"],
+    filteredWindPack["East Velocity"],
+    k=3,
+    s=10
+)
+
+North = UnivariateSpline(
+    filteredWindPack["Altitude MSL"],
+    filteredWindPack["North Velocity"],
+    k=3,
+    s=10
+)
 
 
 #Subtract Wind from jumper data creating new data file
