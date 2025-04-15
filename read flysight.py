@@ -110,6 +110,7 @@ ExportPath = filedialog.asksaveasfilename(
         title="Save CSV File as"
 )
 if ExportPath:
+    JumperCorrected.insert(0, "$GNSS", "$GNSS")
     JumperCorrected.to_csv(ExportPath, index=False, header=False)
     print(f"File saved to: {ExportPath}")
 else:
