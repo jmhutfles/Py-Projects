@@ -7,40 +7,17 @@ from pathlib import Path
 from scipy.optimize import curve_fit
 import math
 import tkinter as tk
-from tkinter import filedialog
 from scipy.interpolate import UnivariateSpline
+from Read_Raw_data import LoadFlysightData
+from tkinter import filedialog
 
 #Dev note: msl alt range for this data is 895 475
 
 #Importing Data
 root = tk.Tk()
 root.withdraw()
-PathWindPack = filedialog.askopenfilename(title="Select Wind pack Data")
-PathJumperRaw = filedialog.askopenfilename(title="Select Jumper Data")
-
-
-# PathWindPack = Path(r'C:\Users\jhutfles\Desktop\Glide Sensor\Glide Analysis\March 2025 Test Session\L2P1\FS 11.CSV')
-# PathJumperRaw = Path(r'C:\Users\jhutfles\Desktop\Glide Sensor\Glide Analysis\March 2025 Test Session\L2P1\FS 10.CSV')
-
-DataHeaders = ["Time", "Latitude", "Longitude", "Altitude MSL", "North Velocity", "East Velocity", "Down Velocity", "hAcc", "vAcc", "sAcc", "heading", "cAcc", "gpsFix", "numSV"]
-DataHeaders2 = ["Time", "Latitude", "Longitude", "Altitude MSL", "North Velocity", "East Velocity", "Down Velocity", "hAcc", "vAcc", "sAcc", "numSV"]
-WindPack = pd.read_csv(PathWindPack,skiprows = 7)
-JumperRaw = pd.read_csv(PathJumperRaw, skiprows = 7)
-
-#Accound for extra first colloumn in new Flysights & Naming Columns
-if WindPack.iloc[0,0] == "$GNSS":
-    WindPack.drop(WindPack.columns[0], axis = 1, inplace = True)
-    WindPack.columns = DataHeaders2
-else:
-    WindPack.columns = DataHeaders
-
-
-if JumperRaw.iloc[0,0] == "$GNSS":
-    JumperRaw.drop(JumperRaw.columns[0], axis = 1, inplace = True)
-    JumperRaw.columns = DataHeaders2
-else:
-    JumperRaw.columns = DataHeaders
-
+WindPack = LoadFlysightData("Select Wind Pack data")
+JumperRaw = LoadFlysightData("Select Jumper Flysight data")
 
 
 
