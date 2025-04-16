@@ -13,7 +13,6 @@ from tkinter import filedialog
 import Conversions
 
 
-#Dev note: msl alt range for this data is 895 475
 
 #Importing Data
 root = tk.Tk()
@@ -23,7 +22,7 @@ JumperRaw = ReadRawData.LoadFlysightData("Select Jumper Flysight data")
 
 
 
-#Try to use graph to Click ground and drop altitude formWindPack data
+#Use graph to Click ground and drop altitude form WindPack data
 ClickedPoints = []
 
 def OnClick(event):
@@ -67,7 +66,6 @@ DropAlt = ClickedPoints[1]
 
 
 
-
 #Mask Data Outside Altitude Window
 mask = (WindPack["Altitude MSL"] > GroundAlt) & (WindPack["Altitude MSL"] < DropAlt)
 filteredWindPack = WindPack[mask]
@@ -77,8 +75,7 @@ filteredJumperRaw = JumperRaw[mask]
 
 
 
-
-#Creating a function that describes wind as a function of altitude
+#Creating a function that describes wind(Altitude)
 
 #Clean Up data to allow spline fit to work
 filteredWindPack = filteredWindPack.sort_values("Altitude MSL")
@@ -99,21 +96,28 @@ North = UnivariateSpline(
 )
 
 
+
 #Subtract Wind from jumper data creating new data file
 JumperCorrected = filteredJumperRaw
 JumperCorrected.loc[:, "East Velocity"] -= East(JumperCorrected["Altitude MSL"])
 JumperCorrected.loc[:, "North Velocity"] -= North(JumperCorrected["Altitude MSL"])
 
+
+#Create Glide Ratio Graph
 hspeed = np.sqrt(JumperCorrected["East Velocity"]**2 + JumperCorrected["North Velocity"]**2)
 GlideRatio = pd.DataFrame({
         "Altitude MSL" : JumperCorrected["Altitude MSL"],
          "Glide Ratio" : hspeed / JumperCorrected["Down Velocity"] 
 })
 
-
 #Smoothing Glide Ratio Data
-
 GlideRatio["Glide Ratio"] = GlideRatio["Glide Ratio"].rolling(window=10).mean()
+
+#Create Glide Ratio Data File With Altitude in ft AGL for Graphing
+GlideAGLft = GlideRatio.copy()
+GlideAGLft["Altitude MSL"] = GlideAGLft["Altitude MSL"] - GroundAlt
+GlideAGLft["Altitude MSL"] = Conversions.MetersToFeet(GlideAGLft["Altitude MSL"])
+GlideAGLft = GlideAGLft.rename(columns={"Altitude MSL": "Altitude AGL (ft)"})
 
 
 
