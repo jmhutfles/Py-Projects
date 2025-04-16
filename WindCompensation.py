@@ -23,13 +23,48 @@ JumperRaw = ReadRawData.LoadFlysightData("Select Jumper Flysight data")
 
 
 
-#Collect User Input about Height Wind Pack was Dropped & Ground Level
-DropAlt = float(input("What Altitude AGL was the WindPack Dropped? (ft) : "))
-GroundAlt = float(input("What Altitude is ground level MSL? (ft) : "))
-DropAlt = DropAlt + GroundAlt
-#Conversions
-GroundAlt = (GroundAlt + 20) *.3048
-DropAlt = DropAlt * .3048
+#Try to use graph to Click ground and drop altitude formWindPack data
+ClickedPoints = []
+
+def OnClick(event):
+    global ClickedPoints
+    #Ignore clicks while zooming or panning
+    if plt.get_current_fig_manager().toolbar.mode != '':
+        return
+
+    if event.xdata is None or event.ydata is None:
+        return
+
+    ClickedPoints.append(event.xdata)
+
+    if len(ClickedPoints) == 1:
+        print(f"Ground Altitude Selected MSL= {event.xdata:.2f} (m)")
+
+    if len(ClickedPoints) == 2:
+        print(f"Wind Pack Drop Altitude MSL= {event.xdata:.2f} (m)")
+    
+    # Stop after 2 points
+    if len(ClickedPoints) == 2:
+        plt.close()
+
+#Plot Raw Wind Pack Data
+plt.figure()
+plt.scatter(WindPack["Altitude MSL"], WindPack["Down Velocity"], label="Down Velocity", color="r")
+plt.scatter(WindPack["Altitude MSL"], WindPack["North Velocity"], label="North Velocity", color="g")
+plt.scatter(WindPack["Altitude MSL"], WindPack["East Velocity"], label="East Velocity", color="b")
+plt.xlabel("Altitude MSL (m)")
+plt.ylabel("Velocity (m)")
+plt.title("Click to select Ground Altitude then Drop Altitude")
+plt.legend()
+
+plt.gcf().canvas.mpl_connect('button_press_event', OnClick)
+
+plt.show()
+
+#Assign Clicked Points to variables
+GroundAlt = ClickedPoints[0]
+DropAlt = ClickedPoints[1]
+
 
 
 
