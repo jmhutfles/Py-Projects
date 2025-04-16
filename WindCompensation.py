@@ -8,16 +8,18 @@ from scipy.optimize import curve_fit
 import math
 import tkinter as tk
 from scipy.interpolate import UnivariateSpline
-from Read_Raw_data import LoadFlysightData
+import ReadRawData
 from tkinter import filedialog
+import Conversions
+
 
 #Dev note: msl alt range for this data is 895 475
 
 #Importing Data
 root = tk.Tk()
 root.withdraw()
-WindPack = LoadFlysightData("Select Wind Pack data")
-JumperRaw = LoadFlysightData("Select Jumper Flysight data")
+WindPack = ReadRawData.LoadFlysightData("Select Wind Pack data")
+JumperRaw = ReadRawData.LoadFlysightData("Select Jumper Flysight data")
 
 
 
@@ -97,7 +99,7 @@ else:
 #Create Glide Ratio Data File With Altitude in ft AGL for Graphing
 GlideAGLft = GlideRatio.copy()
 GlideAGLft["Altitude MSL"] = GlideAGLft["Altitude MSL"] - GroundAlt
-GlideAGLft["Altitude MSL"] = GlideAGLft["Altitude MSL"] * 3.28084
+GlideAGLft["Altitude MSL"] = Conversions.MetersToFeet(GlideAGLft["Altitude MSL"])
 GlideAGLft = GlideAGLft.rename(columns={"Altitude MSL": "Altitude AGL (ft)"})
 
 
