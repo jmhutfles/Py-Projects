@@ -11,6 +11,7 @@ from scipy.interpolate import UnivariateSpline
 import ReadRawData
 from tkinter import filedialog
 import Conversions
+import time
 
 
 
@@ -183,4 +184,5 @@ while True:
         choice = input("Would you like to process another FlySight file? (y/n): ").strip().lower()
         if choice != 'y':
             print("Goodbye!")
+            time.sleep(3)
             break
