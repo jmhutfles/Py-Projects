@@ -165,11 +165,6 @@ plt.title("East Wind Velocity form WindPack")
 plt.gca().invert_xaxis()
 plt.legend()
 
-# plt.figure()
-# plt.plot(GlideRatio["Altitude MSL"], GlideRatio["Glide Ratio"], label = "Glide Ratio", color = "r")
-# plt.xlabel("Altitude MSL")
-# plt.ylabel("Glide Ratio")
-# plt.title("Glide Ratio vs Altitude")
 
 plt.figure()
 plt.plot(GlideAGLft["Altitude AGL (ft)"], GlideAGLft["Glide Ratio"], label = "Glide Ratio", color = "r")
