@@ -5,6 +5,8 @@ from tkinter import filedialog
 def LoadFlysightData(prompt):
     #Loads flysight data into pandas data frame and copensates for it it is FS 1 or FS 2
     #Note: this deletes the first few lines of data to account for some data having headers
+    
+    
     #Importing Data
     
     

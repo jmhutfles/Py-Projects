@@ -20,6 +20,13 @@ root.withdraw()
 WindPack = ReadRawData.LoadFlysightData("Select Wind Pack data")
 JumperRaw = ReadRawData.LoadFlysightData("Select Jumper Flysight data")
 
+#Creating Data Frame Time Format Column
+WindPack["FormattedTime"] = pd.to_datetime(WindPack["Time"])
+WindPack["TimeSinceStart (s)"] = (WindPack["FormattedTime"] - WindPack["FormattedTime"].iloc[0]).dt.total_seconds()
+
+JumperRaw["FormattedTime"] = pd.to_datetime(JumperRaw["Time"])
+JumperRaw["TimeSinceStart (s)"] = (JumperRaw["FormattedTime"] - JumperRaw["FormattedTime"].iloc[0]).dt.total_seconds()
+
 
 
 #Use graph to Click ground and drop altitude form WindPack data
@@ -34,44 +41,53 @@ def OnClick(event):
     if event.xdata is None or event.ydata is None:
         return
 
-    ClickedPoints.append(event.xdata)
+    ClickedPoints.append(event.ydata)
 
     if len(ClickedPoints) == 1:
-        print(f"Ground Altitude Selected MSL= {event.xdata:.2f} (m)")
+        print(f"Impact Altitude MSL = {event.ydata:.2f} (m)")
 
     if len(ClickedPoints) == 2:
-        print(f"Wind Pack Drop Altitude MSL= {event.xdata:.2f} (m)")
+        print(f"Drop Altitude MSL = {event.ydata:.2f} (m)")
     
     # Stop after 2 points
     if len(ClickedPoints) == 2:
         plt.close()
 
 #Plot Raw Wind Pack Data
-plt.figure()
-plt.scatter(WindPack["Altitude MSL"], WindPack["Down Velocity"], label="Down Velocity", color="r")
-plt.scatter(WindPack["Altitude MSL"], WindPack["North Velocity"], label="North Velocity", color="g")
-plt.scatter(WindPack["Altitude MSL"], WindPack["East Velocity"], label="East Velocity", color="b")
-plt.xlabel("Altitude MSL (m)")
-plt.ylabel("Velocity (m/s)")
-plt.title("Click to select Ground Altitude then Drop Altitude")
-plt.gca().invert_xaxis()
-plt.legend()
+fig, ax1 = plt.subplots()
+
+ax1.scatter(WindPack["TimeSinceStart (s)"], WindPack["Down Velocity"], label="Down Velocity", color="r")
+ax1.scatter(WindPack["TimeSinceStart (s)"], WindPack["North Velocity"], label="North Velocity", color="g")
+ax1.scatter(WindPack["TimeSinceStart (s)"], WindPack["East Velocity"], label="East Velocity", color="b")
+ax1.set_xlabel("Time (s)")
+ax1.set_ylabel("Velocity (m/s)")
+ax1.tick_params(axis="y", labelcolor="black")
+
+ax2 = ax1.twinx()
+ax2.scatter(WindPack["TimeSinceStart (s)"], WindPack["Altitude MSL"], label="Altitude MSL", color='black')
+ax2.set_ylabel("Altitude MSL (m)")
+ax2.tick_params(axis="y", labelcolor="black")
+
+lines_1, lables_1 = ax1.get_legend_handles_labels()
+lines_2, lables_2 = ax2.get_legend_handles_labels()
+ax1.legend(lines_1 + lines_2, lables_1 + lables_2, loc="upper right")
+
+plt.title("Click to select impact then drop altitude. Must click on altitude data.")
 
 plt.gcf().canvas.mpl_connect('button_press_event', OnClick)
 
 plt.show()
 
 #Assign Clicked Points to variables
-GroundAlt = ClickedPoints[0]
-DropAlt = ClickedPoints[1]
-
+AltLow = min(ClickedPoints)
+AltHigh = max(ClickedPoints)
 
 
 #Mask Data Outside Altitude Window
-mask = (WindPack["Altitude MSL"] > GroundAlt) & (WindPack["Altitude MSL"] < DropAlt)
+mask = (WindPack["Altitude MSL"] > AltLow) & (WindPack["Altitude MSL"] < AltHigh)
 filteredWindPack = WindPack[mask]
 
-mask = (JumperRaw["Altitude MSL"] > GroundAlt) & (JumperRaw["Altitude MSL"] < DropAlt)
+mask = (JumperRaw["Altitude MSL"] > AltLow) & (JumperRaw["Altitude MSL"] < AltHigh)
 filteredJumperRaw = JumperRaw[mask]
 
 
@@ -114,11 +130,6 @@ GlideRatio = pd.DataFrame({
 #Smoothing Glide Ratio Data
 GlideRatio["Glide Ratio"] = GlideRatio["Glide Ratio"].rolling(window=10).mean()
 
-#Create Glide Ratio Data File With Altitude in ft AGL for Graphing
-GlideAGLft = GlideRatio.copy()
-GlideAGLft["Altitude MSL"] = GlideAGLft["Altitude MSL"] - GroundAlt
-GlideAGLft["Altitude MSL"] = Conversions.MetersToFeet(GlideAGLft["Altitude MSL"])
-GlideAGLft = GlideAGLft.rename(columns={"Altitude MSL": "Altitude AGL (ft)"})
 
 
 
@@ -136,17 +147,8 @@ else:
     print("Save cancelled.")
 
 
-#Create Glide Ratio Data File With Altitude in ft AGL for Graphing
-GlideAGLft = GlideRatio.copy()
-GlideAGLft["Altitude MSL"] = GlideAGLft["Altitude MSL"] - GroundAlt
-GlideAGLft["Altitude MSL"] = Conversions.MetersToFeet(GlideAGLft["Altitude MSL"])
-GlideAGLft = GlideAGLft.rename(columns={"Altitude MSL": "Altitude AGL (ft)"})
 
-
-
-
-
-#Plot the two datasets
+#Plot the three datasets
 plt.figure()
 plt.scatter(filteredWindPack["Altitude MSL"], filteredWindPack["North Velocity"], label="North Wind", color = "r")
 plt.plot(filteredWindPack["Altitude MSL"], North(filteredWindPack["Altitude MSL"]), label = "Spline Fit", color = "g")
@@ -166,16 +168,16 @@ plt.gca().invert_xaxis()
 plt.legend()
 
 
-plt.figure()
-plt.plot(GlideAGLft["Altitude AGL (ft)"], GlideAGLft["Glide Ratio"], label = "Glide Ratio", color = "r")
-plt.xlabel("Altitude AGL (ft)")
-plt.ylabel("Glide Ratio")
-plt.title("Glide Ratio vs Altitude")
-plt.gca().invert_xaxis()
+# plt.figure()
+# plt.plot(GlideRatio["Altitude MSL"], GlideRatio["Glide Ratio"], label = "Glide Ratio", color = "r")
+# plt.xlabel("Altitude MSL (m)")
+# plt.ylabel("Glide Ratio")
+# plt.title("Glide Ratio vs Altitude")
+# plt.gca().invert_xaxis()
 
 plt.show()
 
-
+print("Open yor .csv export in FlySight viewer to view velocity and Glide Ratio data corrected for wind.")
 
 
 
