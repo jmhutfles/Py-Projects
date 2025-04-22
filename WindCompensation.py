@@ -54,6 +54,7 @@ plt.scatter(WindPack["Altitude MSL"], WindPack["East Velocity"], label="East Vel
 plt.xlabel("Altitude MSL (m)")
 plt.ylabel("Velocity (m)")
 plt.title("Click to select Ground Altitude then Drop Altitude")
+plt.gca().invert_xaxis()
 plt.legend()
 
 plt.gcf().canvas.mpl_connect('button_press_event', OnClick)
@@ -152,6 +153,7 @@ plt.plot(filteredWindPack["Altitude MSL"], North(filteredWindPack["Altitude MSL"
 plt.xlabel("Altitude MSL (m)")
 plt.ylabel("Velocity (m/s)")
 plt.title("North Wind Velocity form WindPack")
+plt.gca().invert_xaxis()
 plt.legend()
 
 plt.figure()
@@ -160,6 +162,7 @@ plt.plot(filteredWindPack["Altitude MSL"], East(filteredWindPack["Altitude MSL"]
 plt.xlabel("Altitude MSL (m)")
 plt.ylabel("Velocity (m/s)")
 plt.title("East Wind Velocity form WindPack")
+plt.gca().invert_xaxis()
 plt.legend()
 
 # plt.figure()
@@ -173,6 +176,7 @@ plt.plot(GlideAGLft["Altitude AGL (ft)"], GlideAGLft["Glide Ratio"], label = "Gl
 plt.xlabel("Altitude AGL (ft)")
 plt.ylabel("Glide Ratio")
 plt.title("Glide Ratio vs Altitude")
+plt.gca().invert_xaxis()
 
 plt.show()
 
