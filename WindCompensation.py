@@ -52,7 +52,7 @@ plt.scatter(WindPack["Altitude MSL"], WindPack["Down Velocity"], label="Down Vel
 plt.scatter(WindPack["Altitude MSL"], WindPack["North Velocity"], label="North Velocity", color="g")
 plt.scatter(WindPack["Altitude MSL"], WindPack["East Velocity"], label="East Velocity", color="b")
 plt.xlabel("Altitude MSL (m)")
-plt.ylabel("Velocity (m)")
+plt.ylabel("Velocity (m/s)")
 plt.title("Click to select Ground Altitude then Drop Altitude")
 plt.gca().invert_xaxis()
 plt.legend()
