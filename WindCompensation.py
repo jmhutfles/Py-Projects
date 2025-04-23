@@ -32,7 +32,8 @@ def main():
 
 
     #Use graph to Click ground and drop altitude form WindPack data
-    ClickedPoints = []
+    ClickedPointsY = []
+    ClickedPointsX = []
 
     def OnClick(event):
         #Ignore clicks while zooming or panning
@@ -42,16 +43,18 @@ def main():
         if event.xdata is None or event.ydata is None:
             return
 
-        ClickedPoints.append(event.ydata)
+        ClickedPointsY.append(event.ydata)
+        ClickedPointsX.append(event.xdata)
 
-        if len(ClickedPoints) == 1:
+
+        if len(ClickedPointsY) == 1:
             print(f"Impact Altitude MSL = {event.ydata:.2f} (m)")
 
-        if len(ClickedPoints) == 2:
+        if len(ClickedPointsY) == 2:
             print(f"Drop Altitude MSL = {event.ydata:.2f} (m)")
         
         # Stop after 2 points
-        if len(ClickedPoints) == 2:
+        if len(ClickedPointsY) == 2:
             plt.close()
 
     #Plot Raw Wind Pack Data
@@ -80,15 +83,17 @@ def main():
     plt.show()
 
     #Assign Clicked Points to variables
-    AltLow = min(ClickedPoints)
-    AltHigh = max(ClickedPoints)
+    AltLow = min(ClickedPointsY)
+    AltHigh = max(ClickedPointsY)
+    DropTime = pd.to_timedelta(min(ClickedPointsX), unit="s") + WindPack["FormattedTime"].iloc[0]
+    ImpactTime = pd.to_timedelta(max(ClickedPointsX), unit="s") + WindPack["FormattedTime"].iloc[0]
 
 
     #Mask Data Outside Altitude Window
-    mask = (WindPack["Altitude MSL"] > AltLow) & (WindPack["Altitude MSL"] < AltHigh)
+    mask = (WindPack["Altitude MSL"] > AltLow) & (WindPack["Altitude MSL"] < AltHigh) & (WindPack["FormattedTime"] < (ImpactTime + pd.Timedelta(minutes=5)))
     filteredWindPack = WindPack[mask]
 
-    mask = (JumperRaw["Altitude MSL"] > AltLow) & (JumperRaw["Altitude MSL"] < AltHigh)
+    mask = (JumperRaw["Altitude MSL"] > AltLow) & (JumperRaw["Altitude MSL"] < AltHigh) & (WindPack["FormattedTime"] < (ImpactTime + pd.Timedelta(minutes=5)))
     filteredJumperRaw = JumperRaw[mask]
 
 
