@@ -3,9 +3,10 @@ from tkinter import messagebox
 import subprocess
 from PIL import Image, ImageTk
 import os
+from UIFunctions import RunTool
+from UIFunctions import ConversionsWindow
 
-def RunTool(Tool):
-  subprocess.run(["Python", Tool])
+
 
 #Configure Window
 root = tk.Tk()
@@ -22,7 +23,8 @@ root.geometry(f"{width}x{height}")
 
 
 
-
+#Buttons that do things
+#Run Wind Correction
 tk.Button(root, 
           text="FlySight Wind Correction", 
           command=lambda: RunTool("WindCompensation.py"), 
