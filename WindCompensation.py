@@ -66,11 +66,13 @@ def main():
     ax1.set_xlabel("Time (s)")
     ax1.set_ylabel("Velocity (m/s)")
     ax1.tick_params(axis="y", labelcolor="black")
+    ax1.grid(True)
 
     ax2 = ax1.twinx()
     ax2.scatter(WindPack["TimeSinceStart (s)"], WindPack["Altitude MSL"], label="Altitude MSL", color='black')
     ax2.set_ylabel("Altitude MSL (m)")
     ax2.tick_params(axis="y", labelcolor="black")
+    ax2.grid(True)
 
     lines_1, lables_1 = ax1.get_legend_handles_labels()
     lines_2, lables_2 = ax2.get_legend_handles_labels()
