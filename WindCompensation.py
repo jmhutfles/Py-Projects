@@ -155,7 +155,7 @@ def main():
     plt.plot(filteredWindPack["Altitude MSL"], North(filteredWindPack["Altitude MSL"]), label = "Spline Fit", color = "g")
     plt.xlabel("Altitude MSL (m)")
     plt.ylabel("Velocity (m/s)")
-    plt.title("North Wind Velocity form WindPack")
+    plt.title("North Wind Velocity from WindPack")
     plt.gca().invert_xaxis()
     plt.legend()
 
@@ -164,7 +164,7 @@ def main():
     plt.plot(filteredWindPack["Altitude MSL"], East(filteredWindPack["Altitude MSL"]), label = "Spline Fit", color = "g")
     plt.xlabel("Altitude MSL (m)")
     plt.ylabel("Velocity (m/s)")
-    plt.title("East Wind Velocity form WindPack")
+    plt.title("East Wind Velocity from WindPack")
     plt.gca().invert_xaxis()
     plt.legend()
 
