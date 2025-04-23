@@ -95,7 +95,7 @@ def main():
     mask = (WindPack["Altitude MSL"] > AltLow) & (WindPack["Altitude MSL"] < AltHigh) & (WindPack["FormattedTime"] < (ImpactTime + pd.Timedelta(minutes=5)))
     filteredWindPack = WindPack[mask]
 
-    mask = (JumperRaw["Altitude MSL"] > AltLow) & (JumperRaw["Altitude MSL"] < AltHigh) & (WindPack["FormattedTime"] < (ImpactTime + pd.Timedelta(minutes=5)))
+    mask = (JumperRaw["Altitude MSL"] > AltLow) & (JumperRaw["Altitude MSL"] < AltHigh) & (JumperRaw["FormattedTime"] < (ImpactTime + pd.Timedelta(minutes=5)))
     filteredJumperRaw = JumperRaw[mask]
 
 
