@@ -6,8 +6,8 @@ import os
 from Conversions import FeetToMeters
 import subprocess
 
-def RunTool(Tool):
-  subprocess.run(["Python", Tool])
+def RunTool(Tool, location):
+  subprocess.run(["Python", Tool], cwd=location)
 
 
 def clear_root_window(root):
