@@ -31,5 +31,12 @@ tk.Button(root,
           height=2, 
           width=20
           ).pack(pady=20)
+#Open Conversiosn Page
+tk.Button(root,
+          text="Open Conversions Calculator",
+          command=lambda: ConversionsWindow(root), 
+          height=2, 
+          width=23).pack(pady=15)
+
 
 root.mainloop()
