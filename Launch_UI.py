@@ -13,7 +13,8 @@ root = tk.Tk()
 root.configure(bg='black')
 root.title("Choose a Tool")
 #Add Background Image
-BackgroundImagePath = os.path.join("Pictures", "Test Session Pictures.jpg")
+script_dir = os.path.dirname(os.path.abspath(__file__))
+BackgroundImagePath = os.path.join(script_dir, "Pictures", "Test Session Pictures.jpg")
 BackgroundImage = Image.open(BackgroundImagePath)
 Background = ImageTk.PhotoImage(BackgroundImage)
 bg_label = tk.Label(root, image=Background)
@@ -27,7 +28,7 @@ root.geometry(f"{width}x{height}")
 #Run Wind Correction
 tk.Button(root, 
           text="FlySight Wind Correction", 
-          command=lambda: RunTool("WindCompensation.py"), 
+          command=lambda: RunTool("WindCompensation.py", script_dir), 
           height=2, 
           width=20
           ).pack(pady=20)
