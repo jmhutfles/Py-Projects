@@ -30,3 +30,17 @@ def LoadFlysightData(prompt):
         Data.columns = DataHeaders
     
     return Data
+
+
+def ReadABT(prompt):
+    DataHeaders = ["Time", "Ax", "Ay", "Az", "P", "T"]
+    
+    Path = filedialog.askopenfilename(title=prompt)
+
+    try:
+        Data = pd.read_csv(Path, skiprows=10, header=None, names=DataHeaders)
+        
+        return Data
+    except Exception as e:
+        print(f"Failed to read file: {e}")
+        return None
