@@ -25,9 +25,29 @@ def clear_root_window(root):
 
 def ConversionsWindow(root):
   clear_root_window(root)
+
+  #Create new Window
   new_label = tk.Label(root, text="Conversions", bg="gray")
   new_label.pack(pady=50)
+
+  #Entry Feild Label
+  EntryLabel = tk.Label(root, text="Enter value you want to convert.")
+  EntryLabel.pack()
+
+  #Entry Feild
+  FeetInput = tk.Entry(root)
+  FeetInput.pack()
+
+  def CalculateShow():
+      try:
+        FeetValue = float(FeetInput.get())
+        meters = FeetToMeters(FeetValue)
+        messagebox.showinfo("Result", f"{FeetValue} feet = {meters:.2f} meters")
+      except ValueError:
+        messagebox.showerror("Invalid Input", "Please enter a valid number.")
+
+
   FeetToMetersButton = tk.Button(root,
                                  text="Convert Entered Value from Feet to Meters", 
-                                 command=lambda: messagebox.showinfo("Result", f"{FeetToMeters(5)} meters"))
+                                 command=CalculateShow)
   FeetToMetersButton.pack(pady=20)
