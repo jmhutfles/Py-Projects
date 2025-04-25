@@ -68,6 +68,10 @@ DataUnits["rate_of_descent_ftps"] = -DataUnits["altitude_diff"] / DataUnits["tim
 # Ensure the length of rate_of_descent matches the length of DataUnits
 DataUnits["rate_of_descent_ftps"] = DataUnits["rate_of_descent_ftps"].fillna(np.nan)  # Append NaN to make the length match
 
+#Smooth ROD
+SmoothnessROD = 500
+DataUnits["rate_of_descent_ftps"] = DataUnits["rate_of_descent_ftps"].rolling(window=SmoothnessROD, min_periods=1).mean()
+
 # Create figure and axis
 fig, ax1 = plt.subplots()
 
