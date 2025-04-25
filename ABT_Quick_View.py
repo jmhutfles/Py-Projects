@@ -16,11 +16,40 @@ root = tk.Tk()
 root.withdraw()
 Data = ReadRawData.ReadABT("Select the ABT file.")
 
-plt.figure()
-plt.scatter(Data["Time"], Data["Ax"], label="Ax", color="g")
-plt.scatter(Data["Time"], Data["Ay"], label="Ay", color="r")
-plt.scatter(Data["Time"], Data["Az"], label="Az", color="b")
-plt.scatter(Data["Time"], Data["P"], label="Pressure", color="black")
-plt.scatter(Data["Time"], Data["T"], label="Temperature", color="y")
-plt.legend()
+
+#Turn Data into Proprt Units
+DataUnits = pd.DataFrame()
+DataUnits["Time (s)"] = Data["Time"]
+
+#Altitude Data Formatting
+DataUnits["Altitude MSL (m)"] = 44330 * (1-(Data["P"] / 101325)**(1/5.255))
+DataUnits["Altitude MSL (m)"] = DataUnits["Altitude MSL (m)"].fillna(method="ffill")
+
+#Temperature Data Formatting
+DataUnits["T (deg C)"] = Data["T"] / 1000
+DataUnits["T (deg C)"] = DataUnits["T (deg C)"].fillna(method="ffill")
+
+#Accleration Data Formatting
+DataUnits["Acceleration (g)"] = np.sqrt((np.square(Data["Ax"])) + np.square(Data["Ay"]) + np.square(Data["Az"])) / 2048
+
+
+# Create figure and axis
+fig, ax1 = plt.subplots()
+
+# Plot the first Y-axis (Acceleration)
+ax1.plot(DataUnits["Time (s)"], DataUnits["Acceleration (g)"], label="Acceleration (g)", color='g')
+ax1.set_xlabel("Time (s)")  # X-axis label
+ax1.set_ylabel("Acceleration (g)", color='g')  # First Y-axis label
+ax1.tick_params(axis='y', labelcolor='g')
+
+# Create the second Y-axis for Altitude
+ax2 = ax1.twinx()  # Create a second Y-axis that shares the same X-axis
+ax2.plot(DataUnits["Time (s)"], DataUnits["Altitude MSL (m)"], label="Altitude (m)", color='b')
+ax2.set_ylabel("Altitude MSL (m)", color='b')  # Second Y-axis label
+ax2.tick_params(axis='y', labelcolor='b')
+
+# Adding title and grid
+plt.title("Acceleration and Altitude Raw Data")
+fig.tight_layout()  # Adjust layout to prevent overlap
 plt.show()
+
