@@ -60,6 +60,14 @@ SmoothnessAcc = int(SmoothnessAcc / 2.5)
 DataUnits["Smoothed Altitude MSL (ft)"] = Conversions.MetersToFeet(DataUnits["Altitude MSL (m)"].rolling(window=SmoothnessAlt, min_periods=1).mean())
 DataUnits["Smoothed Accleration (g)"] = DataUnits["Acceleration (g)"].rolling(window=SmoothnessAcc, min_periods=1).mean()
 
+#Calc ROD
+DataUnits["altitude_diff"] = DataUnits["Smoothed Altitude MSL (ft)"].diff()  # ft/s
+DataUnits["time_diff"] = DataUnits["Time (s)"].diff()  # s
+DataUnits["rate_of_descent_ftps"] = -DataUnits["altitude_diff"] / DataUnits["time_diff"]  # Negative for descent
+
+# Ensure the length of rate_of_descent matches the length of DataUnits
+DataUnits["rate_of_descent_ftps"] = DataUnits["rate_of_descent_ftps"].fillna(np.nan)  # Append NaN to make the length match
+
 # Create figure and axis
 fig, ax1 = plt.subplots()
 
@@ -75,7 +83,14 @@ ax2.plot(DataUnits["Time (s)"], DataUnits["Smoothed Altitude MSL (ft)"], label="
 ax2.set_ylabel("Altitude MSL (ft)", color='b')  # Second Y-axis label
 ax2.tick_params(axis='y', labelcolor='b')
 
+# Create the third Y-axis for Rate of Descent
+ax3 = ax1.twinx()  # Create another Y-axis that shares the same X-axis
+ax3.spines['right'].set_position(('outward', 60))  # Position the third Y-axis to the right
+ax3.plot(DataUnits["Time (s)"], DataUnits["rate_of_descent_ftps"], label="Rate of Descent (ft/s)", color='r')
+ax3.set_ylabel("Rate of Descent (ft/s)", color='r')  # Third Y-axis label
+ax3.tick_params(axis='y', labelcolor='r')
+
 # Adding title and grid
-plt.title("Acceleration and Altitude Smoothed Data")
+plt.title("Acceleration, Altitude and ROD Smoothed Data")
 fig.tight_layout()  # Adjust layout to prevent overlap
 plt.show()
