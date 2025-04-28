@@ -38,6 +38,12 @@ tk.Button(root,
           command=lambda: ConversionsWindow(root), 
           height=2, 
           width=23).pack(pady=15)
+#Open ABT Quick View
+tk.Button(root,
+          text="ABT Quick View",
+          command=lambda: RunTool("ABT_Quick_View.py", script_dir),
+          height=2, 
+          width=23).pack(pady=15)
 
 
 root.mainloop()
