@@ -32,8 +32,9 @@ DataUnits["T (deg C)"] = DataUnits["T (deg C)"].ffill()
 DataUnits["Acceleration (g)"] = np.sqrt((np.square(Data["Ax"])) + np.square(Data["Ay"]) + np.square(Data["Az"])) / 2048
 
 #Smoothing
-SmoothnessAlt = 500
-SmoothnessAcc = float(input("Enter filtering value for accleration in ms: "))
+SmoothnessAlt = float(input("Enter filtering value for Altitude data in ms, recommend 500ms: "))
+SmoothnessAlt = int(SmoothnessAlt / 2.5)
+SmoothnessAcc = float(input("Enter filtering value for accleration in ms, recommend 100ms: "))
 SmoothnessAcc = int(SmoothnessAcc / 2.5)
 DataUnits["Smoothed Altitude MSL (ft)"] = Conversions.MetersToFeet(DataUnits["Altitude MSL (m)"].rolling(window=SmoothnessAlt, min_periods=1).mean())
 DataUnits["Smoothed Accleration (g)"] = DataUnits["Acceleration (g)"].rolling(window=SmoothnessAcc, min_periods=1).mean()
@@ -47,7 +48,8 @@ DataUnits["rate_of_descent_ftps"] = -DataUnits["altitude_diff"] / DataUnits["tim
 DataUnits["rate_of_descent_ftps"] = DataUnits["rate_of_descent_ftps"].fillna(np.nan)  # Append NaN to make the length match
 
 #Smooth ROD
-SmoothnessROD = 500
+SmoothnessROD = float(input("Enter filtering value for ROD in ms, recommend 500ms: "))
+SmoothnessROD = int(SmoothnessROD / 2.5)
 DataUnits["rate_of_descent_ftps"] = DataUnits["rate_of_descent_ftps"].rolling(window=SmoothnessROD, min_periods=1).mean()
 
 # Create figure and axis
