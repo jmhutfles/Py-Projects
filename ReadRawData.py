@@ -44,3 +44,17 @@ def ReadABT(prompt):
     except Exception as e:
         print(f"Failed to read file: {e}")
         return None
+
+
+def ReadIMU(prompt):
+    DataHeaders = ["Time", "Ax", "Ay", "Az", "Gx", "Gy", "Gz", "Qw", "Qx", "Qy", "Qz", "Mx", "My", "Mz", "P", "T"]
+
+    Path = filedialog.askopenfilename(title=prompt)
+
+    try:
+        Data = pd.read_csv(Path, skiprows=10, header=None, names=DataHeaders)
+
+        return Data
+    except Exception as e:
+        print(f"Failed to read file: {e}")
+        return None
