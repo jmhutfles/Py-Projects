@@ -45,5 +45,12 @@ tk.Button(root,
           height=2, 
           width=23).pack(pady=15)
 
+#Open IMU Quick View
+tk.Button(root,
+          text="IMU Quick View",
+          command=lambda: RunTool("IMUQuickView.py", script_dir),
+          height=2, 
+          width=23).pack(pady=15)
+
 
 root.mainloop()
