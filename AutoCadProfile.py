@@ -44,7 +44,7 @@ def main():
     try:
         with open(save_path, 'w') as f:
             for i, points in enumerate(points_list):
-                for x, y, _ in reversed(points):
+                for x, y, _ in points:
                     f.write(f"{x} {y}\n")
                 if i < len(points_list) - 1:
                     f.write("\n")  # Only add newline if not the last spline
