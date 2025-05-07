@@ -54,6 +54,7 @@ def ReadIMU(prompt):
 
     try:
         Data = pd.read_csv(Path, skiprows=10, header=None, names=DataHeaders)
+        Data = Data.apply(pd.to_numeric, errors='coerce')
 
         return Data
     except Exception as e:
