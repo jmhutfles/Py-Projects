@@ -32,6 +32,57 @@ def LoadFlysightData(prompt):
     return Data
 
 
+def FlySightSensorRead(prompt):    
+    # Loads the Sensor data from a FlySight 2
+    
+    # Define Column Names
+    DataHeaders = ["Time (s)", "Pressure (Pa)", "Temperature (deg C)", 
+                   "Relative Humidity (%)", "X Mag (gauss)", "Y Mag (gauss)", 
+                   "Z Mag (gauss)", "Wx (deg/s)", "Wy (deg/s)", "Wz (deg/s)", 
+                   "Ax (g)", "Ay (g)", "Az (g)", "tow (s)", "week", "voltage (V)"]
+    NData = pd.DataFrame(columns=DataHeaders)
+    
+    # File Dialog
+    Path = filedialog.askopenfilename(title=prompt)
+
+    # Read CSV File    
+    Data = pd.read_csv(Path, skiprows=17)
+
+    for index, row in Data.iterrows():  # Loop over rows using iterrows()
+        if row[0] == "$IMU":
+            NData.at[index, "Time (s)"] = row[1]
+            NData.at[index, "Wx (deg/s)"] = row[2]
+            NData.at[index, "Wy (deg/s)"] = row[3]
+            NData.at[index, "Wz (deg/s)"] = row[4]
+            NData.at[index, "Ax (g)"] = row[5]
+            NData.at[index, "Ay (g)"] = row[6]
+            NData.at[index, "Az (g)"] = row[7]
+            NData.at[index, "Temperature (deg C)"] = row[8]
+        elif row[0] == "$BARO":
+            NData.at[index, "Time (s)"] = row[1]
+            NData.at[index, "Pressure (Pa)"] = row[2]
+        elif row[0] == "$MAG":
+            NData.at[index, "Time (s)"] = row[1]
+            NData.at[index, "X Mag (gauss)"] = row[2]
+            NData.at[index, "Y Mag (gauss)"] = row[3]
+            NData.at[index, "Z Mag (gauss)"] = row[4]
+        elif row[0] == "$HUM":
+            NData.at[index, "Time (s)"] = row[1]
+            NData.at[index, "Relative Humidity (%)"] = row[2]
+        elif row[0] == "$TIME":
+            NData.at[index, "Time (s)"] = row[1]
+            NData.at[index, "tow (s)"] = row[2]
+            NData.at[index, "week"] = row[3]
+        elif row[0] == "$VBAT":
+            NData.at[index, "Time (s)"] = row[1]
+            NData.at[index, "voltage (V)"] = row[2]
+
+    return NData
+
+
+
+
+
 def ReadABT(prompt):
     DataHeaders = ["Time", "Ax", "Ay", "Az", "P", "T"]
     
