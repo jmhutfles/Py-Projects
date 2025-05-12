@@ -17,4 +17,14 @@ root = tk.Tk()
 root.withdraw()
 Data = ReadRawData.FlySightSensorRead("Select the Sensor FLysight file.")
 
-print(Data)
+#CLeaning up the data
+accel_data = Data.dropna(subset=["Time (s)", "Ax (g)", "Ay (g)", "Az (g)"])
+
+# Drop rows with missing time or acceleration data
+print(accel_data)
+plt.figure(figsize=(10, 5))
+plt.plot(accel_data["Time (s)"], np.sqrt((accel_data["Ax (g)"])**2 + (accel_data["Ay (g)"])**2 + (accel_data["Az (g)"])**2), label="Accleration (g)")
+plt.xlabel("Time (s)")
+plt.ylabel("Acceleration (g)")
+plt.title("Acceleration vs. Time")
+plt.show()
