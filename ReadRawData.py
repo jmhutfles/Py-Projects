@@ -45,7 +45,7 @@ def FlySightSensorRead(prompt):
         return pd.DataFrame(columns=DataHeaders)
 
     # Read file (skip header lines)
-    Data = pd.read_csv(Path, skiprows=17, header=None)
+    Data = pd.read_csv(Path, skiprows=17, header=None, engine="python", on_bad_lines="skip")
 
     # Accumulate parsed rows
     parsed_rows = []
@@ -85,8 +85,12 @@ def FlySightSensorRead(prompt):
             parsed_rows.append(row_data)
         except IndexError:
             continue  # Skip malformed rows
-
-    return pd.DataFrame(parsed_rows, columns=DataHeaders)
+    
+    NData = pd.DataFrame(parsed_rows, columns=DataHeaders)
+    NData["Time (s)"] = pd.to_numeric(NData["Time (s)"], errors="coerce")
+    NData = NData.sort_values("Time (s)").reset_index(drop=True)
+    
+    return NData
 
 
 
