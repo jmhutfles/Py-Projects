@@ -21,7 +21,6 @@ Data = ReadRawData.FlySightSensorRead("Select the Sensor FLysight file.")
 accel_data = Data.dropna(subset=["Time (s)", "Ax (g)", "Ay (g)", "Az (g)"])
 
 # Drop rows with missing time or acceleration data
-print(accel_data)
 plt.figure(figsize=(10, 5))
 plt.plot(accel_data["Time (s)"], np.sqrt((accel_data["Ax (g)"])**2 + (accel_data["Ay (g)"])**2 + (accel_data["Az (g)"])**2), label="Accleration (g)")
 plt.xlabel("Time (s)")
