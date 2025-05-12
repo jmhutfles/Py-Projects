@@ -32,52 +32,61 @@ def LoadFlysightData(prompt):
     return Data
 
 
-def FlySightSensorRead(prompt):    
-    # Loads the Sensor data from a FlySight 2
-    
-    # Define Column Names
+def FlySightSensorRead(prompt):
+    # Define column names
     DataHeaders = ["Time (s)", "Pressure (Pa)", "Temperature (deg C)", 
                    "Relative Humidity (%)", "X Mag (gauss)", "Y Mag (gauss)", 
                    "Z Mag (gauss)", "Wx (deg/s)", "Wy (deg/s)", "Wz (deg/s)", 
                    "Ax (g)", "Ay (g)", "Az (g)", "tow (s)", "week", "voltage (V)"]
-    NData = pd.DataFrame(columns=DataHeaders)
-    
-    # File Dialog
+
+    # File dialog
     Path = filedialog.askopenfilename(title=prompt)
+    if not Path:
+        return pd.DataFrame(columns=DataHeaders)
 
-    # Read CSV File    
-    Data = pd.read_csv(Path, skiprows=17)
+    # Read file (skip header lines)
+    Data = pd.read_csv(Path, skiprows=17, header=None)
 
-    for index, row in Data.iterrows():  # Loop over rows using iterrows()
-        if row[0] == "$IMU":
-            NData.at[index, "Time (s)"] = row[1]
-            NData.at[index, "Wx (deg/s)"] = row[2]
-            NData.at[index, "Wy (deg/s)"] = row[3]
-            NData.at[index, "Wz (deg/s)"] = row[4]
-            NData.at[index, "Ax (g)"] = row[5]
-            NData.at[index, "Ay (g)"] = row[6]
-            NData.at[index, "Az (g)"] = row[7]
-            NData.at[index, "Temperature (deg C)"] = row[8]
-        elif row[0] == "$BARO":
-            NData.at[index, "Time (s)"] = row[1]
-            NData.at[index, "Pressure (Pa)"] = row[2]
-        elif row[0] == "$MAG":
-            NData.at[index, "Time (s)"] = row[1]
-            NData.at[index, "X Mag (gauss)"] = row[2]
-            NData.at[index, "Y Mag (gauss)"] = row[3]
-            NData.at[index, "Z Mag (gauss)"] = row[4]
-        elif row[0] == "$HUM":
-            NData.at[index, "Time (s)"] = row[1]
-            NData.at[index, "Relative Humidity (%)"] = row[2]
-        elif row[0] == "$TIME":
-            NData.at[index, "Time (s)"] = row[1]
-            NData.at[index, "tow (s)"] = row[2]
-            NData.at[index, "week"] = row[3]
-        elif row[0] == "$VBAT":
-            NData.at[index, "Time (s)"] = row[1]
-            NData.at[index, "voltage (V)"] = row[2]
+    # Accumulate parsed rows
+    parsed_rows = []
 
-    return NData
+    for _, row in Data.iterrows():
+        row_data = {key: None for key in DataHeaders}  # Blank row
+        tag = row.iloc[0]
+
+        try:
+            if tag == "$IMU":
+                row_data["Time (s)"] = row.iloc[1]
+                row_data["Wx (deg/s)"] = row.iloc[2]
+                row_data["Wy (deg/s)"] = row.iloc[3]
+                row_data["Wz (deg/s)"] = row.iloc[4]
+                row_data["Ax (g)"] = row.iloc[5]
+                row_data["Ay (g)"] = row.iloc[6]
+                row_data["Az (g)"] = row.iloc[7]
+                row_data["Temperature (deg C)"] = row.iloc[8]
+            elif tag == "$BARO":
+                row_data["Time (s)"] = row.iloc[1]
+                row_data["Pressure (Pa)"] = row.iloc[2]
+            elif tag == "$MAG":
+                row_data["Time (s)"] = row.iloc[1]
+                row_data["X Mag (gauss)"] = row.iloc[2]
+                row_data["Y Mag (gauss)"] = row.iloc[3]
+                row_data["Z Mag (gauss)"] = row.iloc[4]
+            elif tag == "$HUM":
+                row_data["Time (s)"] = row.iloc[1]
+                row_data["Relative Humidity (%)"] = row.iloc[2]
+            elif tag == "$TIME":
+                row_data["Time (s)"] = row.iloc[1]
+                row_data["tow (s)"] = row.iloc[2]
+                row_data["week"] = row.iloc[3]
+            elif tag == "$VBAT":
+                row_data["Time (s)"] = row.iloc[1]
+                row_data["voltage (V)"] = row.iloc[2]
+            parsed_rows.append(row_data)
+        except IndexError:
+            continue  # Skip malformed rows
+
+    return pd.DataFrame(parsed_rows, columns=DataHeaders)
 
 
 
