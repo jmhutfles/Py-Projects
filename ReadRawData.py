@@ -44,48 +44,50 @@ def FlySightSensorRead(prompt):
     if not Path:
         return pd.DataFrame(columns=DataHeaders)
 
-    # Read file (skip header lines)
-    Data = pd.read_csv(Path, skiprows=17, header=None, engine="python", on_bad_lines="skip")
-
-    # Accumulate parsed rows
+    # Read file line by line
     parsed_rows = []
+    with open(Path, "r") as file:
+        lines = file.readlines()[17:]  # Skip the first 17 lines
 
-    for _, row in Data.iterrows():
-        row_data = {key: None for key in DataHeaders}  # Blank row
-        tag = row.iloc[0]
+        for line in lines:
+            columns = line.strip().split(",")  # Split line into columns
+            row_data = {key: None for key in DataHeaders}  # Blank row
+            tag = columns[0] if len(columns) > 0 else None  # Get the tag
 
-        try:
-            if tag == "$IMU":
-                row_data["Time (s)"] = row.iloc[1]
-                row_data["Wx (deg/s)"] = row.iloc[2]
-                row_data["Wy (deg/s)"] = row.iloc[3]
-                row_data["Wz (deg/s)"] = row.iloc[4]
-                row_data["Ax (g)"] = row.iloc[5]
-                row_data["Ay (g)"] = row.iloc[6]
-                row_data["Az (g)"] = row.iloc[7]
-                row_data["Temperature (deg C)"] = row.iloc[8]
-            elif tag == "$BARO":
-                row_data["Time (s)"] = row.iloc[1]
-                row_data["Pressure (Pa)"] = row.iloc[2]
-            elif tag == "$MAG":
-                row_data["Time (s)"] = row.iloc[1]
-                row_data["X Mag (gauss)"] = row.iloc[2]
-                row_data["Y Mag (gauss)"] = row.iloc[3]
-                row_data["Z Mag (gauss)"] = row.iloc[4]
-            elif tag == "$HUM":
-                row_data["Time (s)"] = row.iloc[1]
-                row_data["Relative Humidity (%)"] = row.iloc[2]
-            elif tag == "$TIME":
-                row_data["Time (s)"] = row.iloc[1]
-                row_data["tow (s)"] = row.iloc[2]
-                row_data["week"] = row.iloc[3]
-            elif tag == "$VBAT":
-                row_data["Time (s)"] = row.iloc[1]
-                row_data["voltage (V)"] = row.iloc[2]
-            parsed_rows.append(row_data)
-        except IndexError:
-            continue  # Skip malformed rows
-    
+            try:
+                if tag == "$IMU" and len(columns) >= 9:
+                    row_data["Time (s)"] = columns[1]
+                    row_data["Wx (deg/s)"] = columns[2]
+                    row_data["Wy (deg/s)"] = columns[3]
+                    row_data["Wz (deg/s)"] = columns[4]
+                    row_data["Ax (g)"] = columns[5]
+                    row_data["Ay (g)"] = columns[6]
+                    row_data["Az (g)"] = columns[7]
+                    row_data["Temperature (deg C)"] = columns[8]
+                elif tag == "$BARO" and len(columns) >= 3:
+                    row_data["Time (s)"] = columns[1]
+                    row_data["Pressure (Pa)"] = columns[2]
+                elif tag == "$MAG" and len(columns) >= 5:
+                    row_data["Time (s)"] = columns[1]
+                    row_data["X Mag (gauss)"] = columns[2]
+                    row_data["Y Mag (gauss)"] = columns[3]
+                    row_data["Z Mag (gauss)"] = columns[4]
+                elif tag == "$HUM" and len(columns) >= 3:
+                    row_data["Time (s)"] = columns[1]
+                    row_data["Relative Humidity (%)"] = columns[2]
+                elif tag == "$TIME" and len(columns) >= 4:
+                    row_data["Time (s)"] = columns[1]
+                    row_data["tow (s)"] = columns[2]
+                    row_data["week"] = columns[3]
+                elif tag == "$VBAT" and len(columns) >= 3:
+                    row_data["Time (s)"] = columns[1]
+                    row_data["voltage (V)"] = columns[2]
+                parsed_rows.append(row_data)
+            except IndexError:
+                print(f"Skipping malformed row: {line.strip()}")
+                continue
+
+    # Convert parsed rows to DataFrame
     NData = pd.DataFrame(parsed_rows, columns=DataHeaders)
     NData["Time (s)"] = pd.to_numeric(NData["Time (s)"], errors="coerce")
     NData = NData.sort_values("Time (s)").reset_index(drop=True)
