@@ -10,6 +10,7 @@ import ReadRawData
 from tkinter import filedialog
 import Conversions
 import time
+from matplotlib.ticker import AutoLocator
 
 
 #Get Data
@@ -68,11 +69,19 @@ line2, = ax2.plot(GPSData["Elapsed (s)"], GPSData["Altitude MSL"], color='tab:or
 ax2.set_ylabel("Altitude MSL (m)", color='tab:orange')
 ax2.tick_params(axis='y', labelcolor='tab:orange')
 
-# Legend
-lines = [line1, line2]
+# Vertical Speed (third axis)
+ax3 = ax1.twinx()
+ax3.spines["right"].set_position(("axes", 1.12))  # Offset the third axis
+line3, = ax3.plot(GPSData["Elapsed (s)"], GPSData["Down Velocity"], color='tab:green', label="Vertical Speed (m/s)")
+ax3.set_ylabel("Vertical Speed (m/s)", color='tab:green')
+ax3.tick_params(axis='y', labelcolor='tab:green')
+ax3.yaxis.set_major_locator(AutoLocator())
+
+# Combine legends
+lines = [line1, line2, line3]
 labels = [line.get_label() for line in lines]
 ax1.legend(lines, labels, loc='upper right')
 
-plt.title("Acceleration and Altitude vs. Elapsed Time")
+plt.title("Acceleration, Altitude, and GPS Vertical Speed vs. Elapsed Time")
 plt.tight_layout()
 plt.show()
