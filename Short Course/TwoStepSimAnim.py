@@ -93,6 +93,20 @@ for _ in tqdm(range(max_steps), desc="Simulating Drogue Fall"):
     vx_list.append(vx)
     vy_list.append(vy)
 
+
+# --------------------------
+# Extend animation to hold last frame
+# --------------------------
+hold_frames = int(10 / Dt)  # Hold for 10 seconds
+
+for _ in range(hold_frames):
+    timelist.append(t)
+    x_list.append(x_list[-1])
+    y_list.append(0)
+    vx_list.append(0)
+    vy_list.append(0)
+
+
 # --------------------------
 # Animation
 # --------------------------
@@ -149,15 +163,15 @@ def update(frame):
     speed = np.sqrt(vx**2 + vy**2)
     altitude = y_list[frame]
     current_time = timelist[frame]
-    info_text.set_text(f"Speed: {speed:.1f} m/s\nAltitude: {altitude:.1f} m\nTime: {current_time:.1f} s")
+    info_text.set_text(f"Speed: {speed:.1f} m/s\nAltitude MSL: {altitude:.1f} m\nTime: {current_time:.1f} s")
 
     # Touchdown message
     if altitude <= 0:
-        touchdown_text.set_text("🎉 Congratulations! Touchdown! 🎉")
+        touchdown_text.set_text("Congratulations! Touchdown!")
     else:
         touchdown_text.set_text('')
 
     return dot, trail, parachute_patch, info_text, deploy_text, touchdown_text
 
-ani = animation.FuncAnimation(fig, update, frames=len(x_list), interval=Dt*1000, blit=True)
+ani = animation.FuncAnimation(fig, update, frames=len(x_list), interval=Dt*500, blit=True)
 plt.show()
