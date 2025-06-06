@@ -91,6 +91,7 @@ def FlySightSensorRead(prompt):
     NData = pd.DataFrame(parsed_rows, columns=DataHeaders)
     NData["Time (s)"] = pd.to_numeric(NData["Time (s)"], errors="coerce")
     NData = NData.sort_values("Time (s)").reset_index(drop=True)
+
     
     return NData
 
