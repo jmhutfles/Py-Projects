@@ -33,25 +33,6 @@ DataUnits["T (deg C)"] = DataUnits["T (deg C)"].ffill()
 DataUnits["Acceleration (g)"] = np.sqrt((np.square(Data["Ax"])) + np.square(Data["Ay"]) + np.square(Data["Az"])) / 2048
 
 
-# # Create figure and axis
-# fig, ax1 = plt.subplots()
-
-# # Plot the first Y-axis (Acceleration)
-# ax1.plot(DataUnits["Time (s)"], DataUnits["Acceleration (g)"], label="Acceleration (g)", color='g')
-# ax1.set_xlabel("Time (s)")  # X-axis label
-# ax1.set_ylabel("Acceleration (g)", color='g')  # First Y-axis label
-# ax1.tick_params(axis='y', labelcolor='g')
-
-# # Create the second Y-axis for Altitude
-# ax2 = ax1.twinx()  # Create a second Y-axis that shares the same X-axis
-# ax2.plot(DataUnits["Time (s)"], DataUnits["Altitude MSL (m)"], label="Altitude (m)", color='b')
-# ax2.set_ylabel("Altitude MSL (m)", color='b')  # Second Y-axis label
-# ax2.tick_params(axis='y', labelcolor='b')
-
-# # Adding title and grid
-# plt.title("Acceleration and Altitude Raw Data")
-# fig.tight_layout()  # Adjust layout to prevent overlap
-# plt.show()
 
 #Smoothing
 SmoothnessAlt = float(input("Enter filtering value for Altitude data in ms, recommend 500ms: "))
