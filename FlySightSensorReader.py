@@ -16,7 +16,7 @@ import time
 root = tk.Tk()
 root.withdraw()
 Data = ReadRawData.FlySightSensorRead("Select the Sensor FLysight file.")
-print(Data)
+GPSData = ReadRawData.LoadFlysightData("Select the GPS Flysight file.")
 
 output_file = filedialog.asksaveasfilename(
     title="Save the processed data as CSV",
@@ -31,8 +31,12 @@ else:
     print("Export canceled.")
 
 #CLeaning up the data
+for col in ["Ax (g)", "Ay (g)", "Az (g)"]:
+    Data[col] = pd.to_numeric(Data[col], errors="coerce")
 accel_data = Data.dropna(subset=["Time (s)", "Ax (g)", "Ay (g)", "Az (g)"])
-print(accel_data)
+
+#Get GPS Altitude Data in Same Time Scale
+GPSData["Time"] = GPSData["Time"].apply(lambda x: Conversions.iso_to_gps_week_seconds(x)[1])
 
 plt.figure(figsize=(10, 5))
 plt.plot(accel_data["Time (s)"], 
@@ -43,4 +47,11 @@ plt.plot(accel_data["Time (s)"],
 plt.xlabel("Time (s)")
 plt.ylabel("Acceleration (g)")
 plt.title("Acceleration vs. Time")
+
+plt.figure(figsize=(10, 5))
+plt.plot(GPSData["Time"], GPSData["Altitude MSL"], 
+        label="Altitude")
+plt.xlabel("Time (s)")
+plt.ylabel("Altitude MSL (m)")
+plt.title("Altitude vs. Time")
 plt.show()
