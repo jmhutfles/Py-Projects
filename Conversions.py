@@ -37,7 +37,7 @@ def convert_sensor_time_to_utc(df):
 def format_and_smooth_abt_data(Data, 
                                smoothness_alt_ms=500, 
                                smoothness_acc_ms=100, 
-                               smoothness_rod_ms=500):
+                               smoothness_rod_ms=1500):
     """
     Formats and smooths ABT data, returning a DataFrame with all derived columns.
     """
