@@ -79,8 +79,8 @@ frame_idx = 0
 # --- Overlay parameters ---
 PLOT_EVERY_N_FRAMES = 1  # OpenCV is fast, so update every frame
 plot_win = 5  # seconds before and after current time
-plot_width = frame_width // 2
-plot_height = frame_height // 3
+plot_width = int(frame_width * 0.8)   # Was frame_width // 2
+plot_height = int(frame_height * 0.45)  # Was frame_height // 3
 plot_x = 0
 plot_y = frame_height - plot_height
 
@@ -106,11 +106,11 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
         # --- Draw plot background ---
         overlay = frame.copy()
         cv2.rectangle(overlay, (plot_x, plot_y), (plot_x + plot_width, plot_y + plot_height), (30, 30, 30), -1)
-        alpha = 0.8
+        alpha = 0.3
         frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
 
         # --- Draw axes ---
-        margin = 40
+        margin = 55
         axis_color = (200, 200, 200)
         # Y axes for each variable
         cv2.line(frame, (plot_x + margin, plot_y), (plot_x + margin, plot_y + plot_height), axis_color, 1)
@@ -161,22 +161,34 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
         altitude = current_row['Smoothed Altitude MSL (ft)'].values[0]
         rod = current_row['rate_of_descent_ftps'].values[0]
         acc = current_row['Smoothed Accleration (g)'].values[0]
-        info_text = f"Alt: {altitude:,.0f} ft  ROD: {rod:,.1f} ft/s  Acc: {acc:,.2f} g"
-        cv2.putText(
-            frame, info_text, (plot_x + 10, plot_y + 30),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA
-        )
 
-        # Y-axis title (vertical, left side)
-        cv2.putText(
-            frame, "Altitude/ROD/Acc", (plot_x + 5, plot_y + margin - 15),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2, cv2.LINE_AA
-        )
+        # Calculate max acceleration so far
+        max_acc_so_far = df[df['Time (s)'] <= data_time]['Smoothed Accleration (g)'].max()
 
+        info_text = [
+            f"Alt: {altitude:,.0f} ft",
+            f"ROD: {rod:,.1f} ft/s",
+            f"Acc: {acc:,.2f} g",
+            f"Max Acc: {max_acc_so_far:.2f} g"
+        ]
+        # Calculate starting x/y for upper right
+        text_margin = 20
+        text_height = 30
+        start_x = frame_width - 350  # Adjust width as needed for your text length
+        start_y = text_margin + text_height  # Move to upper right
+
+        for i, line in enumerate(info_text):
+            cv2.putText(
+                frame, line,
+                (start_x, start_y + i * text_height),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA
+            )
+
+       
         # X-axis title (bottom center)
         cv2.putText(
-            frame, "Time (s)", (plot_x + plot_width // 2 - 40, plot_y + plot_height - 10),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2, cv2.LINE_AA
+            frame, "Time (s)", (plot_x + plot_width // 2 - 40, plot_y + plot_height - 15),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2, cv2.LINE_AA
         )
 
         # Y-axis (left) ticks and labels for Altitude
@@ -185,8 +197,13 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
             cv2.line(frame, (plot_x + margin - 7, y), (plot_x + margin, y), (200, 200, 200), 1)
             cv2.putText(
                 frame, f"{int(val):d}", (plot_x + 2, y + 5),
-                cv2.FONT_HERSHEY_PLAIN, 1, (255, 200, 0), 1, cv2.LINE_AA
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 200, 0), 1, cv2.LINE_AA
             )
+        # Altitude label
+        cv2.putText(
+            frame, "Alt (ft)", (plot_x + 2, plot_y + margin - 25),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 200, 0), 2, cv2.LINE_AA
+        )
 
         # Y-axis (right) ticks and labels for ROD
         for i, val in enumerate(np.linspace(rod_min, rod_max, 5)):
@@ -194,8 +211,13 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
             cv2.line(frame, (plot_x + plot_width - margin, y), (plot_x + plot_width - margin + 7, y), (200, 200, 200), 1)
             cv2.putText(
                 frame, f"{val:.0f}", (plot_x + plot_width - margin + 10, y + 5),
-                cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 1, cv2.LINE_AA
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 1, cv2.LINE_AA
             )
+        # ROD label
+        cv2.putText(
+            frame, "ROD (ft/s)", (plot_x + plot_width - margin + 5, plot_y + margin - 25),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA
+        )
 
         # X-axis ticks and labels (Time)
         for i, val in enumerate(np.linspace(x_min, x_max, 5)):
@@ -204,8 +226,36 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
             cv2.line(frame, (x, y), (x, y + 7), (200, 200, 200), 1)
             cv2.putText(
                 frame, f"{val:.1f}", (x - 15, y + 25),
-                cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1, cv2.LINE_AA
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1, cv2.LINE_AA
             )
+
+        # Plot title (top center of plot area)
+        plot_title = "ABT Data Overlay"
+        title_size = 1.1
+        title_thickness = 2
+        (title_w, title_h), _ = cv2.getTextSize(plot_title, cv2.FONT_HERSHEY_SIMPLEX, title_size, title_thickness)
+        title_x = plot_x + (plot_width - title_w) // 2
+        title_y = plot_y + 35  # 35 pixels from the top of the plot area
+
+        cv2.putText(
+            frame, plot_title, (title_x, title_y),
+            cv2.FONT_HERSHEY_SIMPLEX, title_size, (255, 255, 255), title_thickness, cv2.LINE_AA
+        )
+
+        # Acceleration axis (inside left, green)
+        acc_axis_x = plot_x + margin + 100  # Increased from +30 to +90 to avoid overlap
+        for i, val in enumerate(np.linspace(acc_min, acc_max, 5)):
+            y = int(plot_y + plot_height - margin - ((val - acc_min) / (acc_max - acc_min + 1e-6)) * (plot_height - 2 * margin))
+            cv2.line(frame, (acc_axis_x - 10, y), (acc_axis_x, y), (0, 255, 0), 2)
+            cv2.putText(
+                frame, f"{val:.2f}", (acc_axis_x - 55, y + 5),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1, cv2.LINE_AA
+            )
+        # Acceleration label
+        cv2.putText(
+            frame, "Acc (g)", (acc_axis_x - 55, plot_y + margin - 25),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA
+        )
 
         out.write(frame)
         frame_idx += 1
