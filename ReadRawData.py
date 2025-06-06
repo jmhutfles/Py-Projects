@@ -29,6 +29,7 @@ def LoadFlysightData(prompt):
     else:
         Data.columns = DataHeaders
     
+    Data["UTC"] = pd.to_datetime(Data["Time"])
     return Data
 
 

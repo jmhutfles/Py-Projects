@@ -11,20 +11,20 @@ def MetersToFeet(meters):
     feet = meters * 3.28084
     return feet
 
+def gps_to_utc(gps_week, gps_seconds):
+    gps_epoch = datetime(1980, 1, 6, 0, 0, 0)
+    leap_seconds = 18  # Update if leap seconds change
+    return gps_epoch + timedelta(weeks=int(gps_week), seconds=float(gps_seconds) - leap_seconds)
 
-
-def iso_to_gps_week_seconds(iso_str):
-    # Parse ISO time
-    dt = datetime.strptime(iso_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-    
-    # Get the most recent GPS week start (Sunday 00:00 UTC)
-    week_start = dt - timedelta(days=dt.weekday() + 1 if dt.weekday() < 6 else 0,
-                                hours=dt.hour,
-                                minutes=dt.minute,
-                                seconds=dt.second,
-                                microseconds=dt.microsecond)
-    
-    # Seconds since GPS week start
-    gps_week_seconds = (dt - week_start).total_seconds()
-    
-    return int(gps_week_seconds), gps_week_seconds  # rounded, and exact
+def convert_sensor_time_to_utc(df):
+    # Find the first row with both 'Time (s)', 'tow (s)', and 'week' filled (from $TIME row)
+    ref_row = df.dropna(subset=["Time (s)", "tow (s)", "week"]).iloc[0]
+    t_sensor_ref = float(ref_row["Time (s)"])
+    t_gps_ref = float(ref_row["tow (s)"])
+    gps_week = int(ref_row["week"])
+    # Compute UTC for each row
+    def row_to_utc(t_sensor):
+        t_gps = t_gps_ref + (t_sensor - t_sensor_ref)
+        return gps_to_utc(gps_week, t_gps)
+    df["UTC"] = df["Time (s)"].apply(row_to_utc)
+    return df
