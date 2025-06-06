@@ -16,6 +16,7 @@ import time
 root = tk.Tk()
 root.withdraw()
 Data = ReadRawData.FlySightSensorRead("Select the Sensor FLysight file.")
+Data = Conversions.convert_sensor_time_to_utc(Data)
 GPSData = ReadRawData.LoadFlysightData("Select the GPS Flysight file.")
 
 output_file = filedialog.asksaveasfilename(
@@ -33,25 +34,45 @@ else:
 #CLeaning up the data
 for col in ["Ax (g)", "Ay (g)", "Az (g)"]:
     Data[col] = pd.to_numeric(Data[col], errors="coerce")
-accel_data = Data.dropna(subset=["Time (s)", "Ax (g)", "Ay (g)", "Az (g)"])
+accel_data = Data.dropna(subset=["UTC", "Ax (g)", "Ay (g)", "Az (g)"])
 
-#Get GPS Altitude Data in Same Time Scale
-GPSData["Time"] = GPSData["Time"].apply(lambda x: Conversions.iso_to_gps_week_seconds(x)[1])
+# Ensure both UTC columns are datetime and timezone-naive
+accel_data.loc[:, "UTC"] = pd.to_datetime(accel_data["UTC"]).dt.tz_localize(None)
+GPSData["UTC"] = pd.to_datetime(GPSData["UTC"]).dt.tz_localize(None)
 
-plt.figure(figsize=(10, 5))
-plt.plot(accel_data["Time (s)"], 
-         np.sqrt((accel_data["Ax (g)"])**2 + 
-                 (accel_data["Ay (g)"])**2 + 
-                 (accel_data["Az (g)"])**2), 
-        label="Accleration (g)")
-plt.xlabel("Time (s)")
-plt.ylabel("Acceleration (g)")
-plt.title("Acceleration vs. Time")
+# Find the earliest UTC across both datasets
+min_utc = min(accel_data["UTC"].min(), GPSData["UTC"].min())
 
-plt.figure(figsize=(10, 5))
-plt.plot(GPSData["Time"], GPSData["Altitude MSL"], 
-        label="Altitude")
-plt.xlabel("Time (s)")
-plt.ylabel("Altitude MSL (m)")
-plt.title("Altitude vs. Time")
+# Create elapsed seconds columns
+accel_data["Elapsed (s)"] = (accel_data["UTC"] - min_utc).dt.total_seconds()
+GPSData["Elapsed (s)"] = (GPSData["UTC"] - min_utc).dt.total_seconds()
+
+# Plot both on the same figure with elapsed seconds
+plt.figure(figsize=(12, 6))
+ax1 = plt.gca()
+
+# Acceleration
+accel_mag = np.sqrt(
+    accel_data["Ax (g)"]**2 +
+    accel_data["Ay (g)"]**2 +
+    accel_data["Az (g)"]**2
+)
+line1, = ax1.plot(accel_data["Elapsed (s)"], accel_mag, color='tab:blue', label="Acceleration (g)")
+ax1.set_xlabel("Elapsed Time (s)")
+ax1.set_ylabel("Acceleration (g)", color='tab:blue')
+ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+# Altitude
+ax2 = ax1.twinx()
+line2, = ax2.plot(GPSData["Elapsed (s)"], GPSData["Altitude MSL"], color='tab:orange', label="Altitude MSL (m)")
+ax2.set_ylabel("Altitude MSL (m)", color='tab:orange')
+ax2.tick_params(axis='y', labelcolor='tab:orange')
+
+# Legend
+lines = [line1, line2]
+labels = [line.get_label() for line in lines]
+ax1.legend(lines, labels, loc='upper right')
+
+plt.title("Acceleration and Altitude vs. Elapsed Time")
+plt.tight_layout()
 plt.show()
