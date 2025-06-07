@@ -85,20 +85,17 @@ def main():
     plt.show()
 
     #Assign Clicked Points to variables
-    AltLow = min(ClickedPointsY)
-    AltHigh = max(ClickedPointsY)
-    DropTime = pd.to_timedelta(min(ClickedPointsX), unit="s") + WindPack["FormattedTime"].iloc[0]
-    ImpactTime = pd.to_timedelta(max(ClickedPointsX), unit="s") + WindPack["FormattedTime"].iloc[0]
 
+    # Use ClickedPointsX (time in seconds since start) to define your window
+    StartTime = pd.to_timedelta(min(ClickedPointsX), unit="s") + WindPack["FormattedTime"].iloc[0]
+    EndTime = pd.to_timedelta(max(ClickedPointsX), unit="s") + WindPack["FormattedTime"].iloc[0]
 
-    #Mask Data Outside Altitude Window
-    mask = (WindPack["Altitude MSL"] > AltLow) & (WindPack["Altitude MSL"] < AltHigh) & (WindPack["FormattedTime"] < (ImpactTime + pd.Timedelta(minutes=5)))
+    # Mask data outside the selected time window
+    mask = (WindPack["FormattedTime"] >= StartTime) & (WindPack["FormattedTime"] <= EndTime)
     filteredWindPack = WindPack[mask]
 
-    mask = (JumperRaw["Altitude MSL"] > AltLow) & (JumperRaw["Altitude MSL"] < AltHigh) & (JumperRaw["FormattedTime"] < (ImpactTime + pd.Timedelta(minutes=5)))
+    mask = (JumperRaw["FormattedTime"] >= StartTime) & (JumperRaw["FormattedTime"] <= EndTime)
     filteredJumperRaw = JumperRaw[mask]
-
-
 
     #Creating a function that describes wind(Altitude)
 
@@ -148,6 +145,10 @@ def main():
             title="Save CSV File as"
     )
     if ExportPath:
+        # Drop the last three columns before exporting
+        JumperCorrected = JumperCorrected.iloc[:, :-3]
+
+        # Now insert $GNSS and export
         JumperCorrected.insert(0, "$GNSS", "$GNSS")
         JumperCorrected.to_csv(ExportPath, index=False, header=False)
         print(f"File saved to: {ExportPath}")
