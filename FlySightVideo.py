@@ -6,6 +6,8 @@ import ReadRawData
 import Conversions
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import subprocess
+import os
 
 # --- FILE DIALOG PROMPTS ---
 root = Tk()
@@ -194,24 +196,20 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
             # --- Draw data lines ---
             if len(plot_data) > 1:
                 t = plot_data['Elapsed (s)'].values
-                alt = plot_data['Altitude_ft'].values
                 down = plot_data['Down_Vel_mph'].values
                 horiz = plot_data['Horiz_Speed_mph'].values
-                total = plot_data['Total_Speed_mph'].values
                 glide = plot_data['Glide_Ratio'].values
 
                 t_norm = ((t - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin
 
-                # Altitude (blue)
-                alt_norm = (alt - alt_min) / (alt_max - alt_min + 1e-6)
-                alt_norm = plot_y + plot_height - margin - alt_norm * (plot_height - 2 * margin)
-                for i in range(1, len(t)):
-                    pt1 = (int(t_norm[i-1]), int(alt_norm[i-1]))
-                    pt2 = (int(t_norm[i]), int(alt_norm[i]))
-                    cv2.line(frame, pt1, pt2, (255, 200, 0), 2)
+                # Auto-scale for speeds in this window
+                down_min_win, down_max_win = down.min(), down.max()
+                horiz_min_win, horiz_max_win = horiz.min(), horiz.max()
+                speed_min = min(down_min_win, horiz_min_win)
+                speed_max = max(down_max_win, horiz_max_win)
 
                 # Vertical Speed (red)
-                down_norm = (down - down_min) / (down_max - down_min + 1e-6)
+                down_norm = (down - speed_min) / (speed_max - speed_min + 1e-6)
                 down_norm = plot_y + plot_height - margin - down_norm * (plot_height - 2 * margin)
                 for i in range(1, len(t)):
                     pt1 = (int(t_norm[i-1]), int(down_norm[i-1]))
@@ -219,30 +217,22 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
                     cv2.line(frame, pt1, pt2, (0, 0, 255), 2)
 
                 # Horizontal Speed (green)
-                horiz_norm = (horiz - horiz_min) / (horiz_max - horiz_min + 1e-6)
+                horiz_norm = (horiz - speed_min) / (speed_max - speed_min + 1e-6)
                 horiz_norm = plot_y + plot_height - margin - horiz_norm * (plot_height - 2 * margin)
                 for i in range(1, len(t)):
                     pt1 = (int(t_norm[i-1]), int(horiz_norm[i-1]))
                     pt2 = (int(t_norm[i]), int(horiz_norm[i]))
                     cv2.line(frame, pt1, pt2, (0, 255, 0), 2)
 
-                # Total Speed (magenta)
-                total_norm = (total - total_min) / (total_max - total_min + 1e-6)
-                total_norm = plot_y + plot_height - margin - total_norm * (plot_height - 2 * margin)
+                # Glide Ratio (cyan), always scale 0-6
+                glide_clipped = np.clip(glide, 0, 6)
+                glide_norm = (glide_clipped - 0) / 6.0
+                glide_norm = plot_y + plot_height - margin - glide_norm * (plot_height - 2 * margin)
                 for i in range(1, len(t)):
-                    pt1 = (int(t_norm[i-1]), int(total_norm[i-1]))
-                    pt2 = (int(t_norm[i]), int(total_norm[i]))
-                    cv2.line(frame, pt1, pt2, (255, 0, 255), 2)
-
-                # Glide Ratio (cyan)
-                if not np.isnan(glide_min) and not np.isnan(glide_max) and glide_max != glide_min:
-                    glide_norm = (glide - glide_min) / (glide_max - glide_min + 1e-6)
-                    glide_norm = plot_y + plot_height - margin - glide_norm * (plot_height - 2 * margin)
-                    for i in range(1, len(t)):
-                        if not np.isnan(glide_norm[i-1]) and not np.isnan(glide_norm[i]):
-                            pt1 = (int(t_norm[i-1]), int(glide_norm[i-1]))
-                            pt2 = (int(t_norm[i]), int(glide_norm[i]))
-                            cv2.line(frame, pt1, pt2, (255, 255, 0), 2)
+                    if not np.isnan(glide_norm[i-1]) and not np.isnan(glide_norm[i]):
+                        pt1 = (int(t_norm[i-1]), int(glide_norm[i-1]))
+                        pt2 = (int(t_norm[i]), int(glide_norm[i]))
+                        cv2.line(frame, pt1, pt2, (255, 255, 0), 2)
 
                 # Draw vertical line at current (clamped) data time
                 curr_x = int(((data_time_clamped - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin)
@@ -314,18 +304,30 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2, cv2.LINE_AA
             )
 
-            # Y-axis (far right) ticks and labels for Glide Ratio
-            if not np.isnan(glide_min) and not np.isnan(glide_max) and glide_max != glide_min:
-                for i, val in enumerate(np.linspace(glide_min, glide_max, 5)):
-                    y = int(plot_y + plot_height - margin - ((val - glide_min) / (glide_max - glide_min + 1e-6)) * (plot_height - 2 * margin))
-                    cv2.putText(
-                        frame, f"{val:.2f}", (plot_x + plot_width - margin + 100, y + 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 1, cv2.LINE_AA
-                    )
+            # Y-axis (left) ticks and labels for Speed (mph)
+            for i, val in enumerate(np.linspace(speed_min, speed_max, 5)):
+                y = int(plot_y + plot_height - margin - ((val - speed_min) / (speed_max - speed_min + 1e-6)) * (plot_height - 2 * margin))
+                cv2.line(frame, (plot_x + margin - 7, y), (plot_x + margin, y), (200, 200, 200), 1)
                 cv2.putText(
-                    frame, "Glide", (plot_x + plot_width - margin + 100, plot_y + margin - 25),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2, cv2.LINE_AA
+                    frame, f"{val:.1f}", (plot_x + 2, y + 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1, cv2.LINE_AA
                 )
+            cv2.putText(
+                frame, "Speed (mph)", (plot_x + 2, plot_y + margin - 25),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA
+            )
+
+            # Y-axis (far right) ticks and labels for Glide Ratio (0-6)
+            for i, val in enumerate(np.linspace(0, 6, 7)):
+                y = int(plot_y + plot_height - margin - ((val - 0) / 6.0) * (plot_height - 2 * margin))
+                cv2.putText(
+                    frame, f"{val:.0f}", (plot_x + plot_width - margin + 100, y + 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 1, cv2.LINE_AA
+                )
+            cv2.putText(
+                frame, "Glide", (plot_x + plot_width - margin + 100, plot_y + margin - 25),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2, cv2.LINE_AA
+            )
 
             # X-axis ticks and labels (Time)
             for i, val in enumerate(np.linspace(x_min, x_max, 5)):
@@ -356,3 +358,29 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
 cap.release()
 out.release()
 print("Overlay video saved:", output_path)
+
+# --- OPTIONAL: Add original audio back using ffmpeg ---
+def mux_audio(original_video, overlay_video, output_with_audio):
+    try:
+        # ffmpeg command to copy video from overlay, audio from original
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i", overlay_video,
+            "-i", original_video,
+            "-c:v", "copy",
+            "-c:a", "copy",
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-shortest",
+            output_with_audio
+        ]
+        subprocess.run(cmd, check=True)
+        print(f"Overlay video with audio saved as: {output_with_audio}")
+    except Exception as e:
+        print("Could not mux audio with ffmpeg:", e)
+
+# Only run if output_path and video_path are set and ffmpeg is available
+if os.path.isfile(output_path) and os.path.isfile(video_path):
+    output_with_audio = os.path.splitext(output_path)[0] + "_with_audio.mp4"
+    mux_audio(video_path, output_path, output_with_audio)
