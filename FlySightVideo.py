@@ -65,7 +65,7 @@ fig, ax1 = plt.subplots(figsize=(12, 6))
 # Left y-axis: Altitude
 ax1.plot(GPSData['Elapsed (s)'], GPSData['Altitude_ft'], label='Altitude (ft)', color='b')
 ax1.set_ylabel("Altitude (ft)", color='b')
-ax1.tick_params(axis='y', labelcolor='b')
+ax1.tick_params(axis='y', labelcolor='b', labelright=False, labelleft=True)
 
 # Right y-axis: Speeds
 ax2 = ax1.twinx()
@@ -73,14 +73,14 @@ ax2.plot(GPSData['Elapsed (s)'], GPSData['Down_Vel_mph'], label='Vert Spd (mph)'
 ax2.plot(GPSData['Elapsed (s)'], GPSData['Horiz_Speed_mph'], label='Horiz Spd (mph)', color='g')
 ax2.plot(GPSData['Elapsed (s)'], GPSData['Total_Speed_mph'], label='Total Spd (mph)', color='m')
 ax2.set_ylabel("Speed (mph)", color='k')
-ax2.tick_params(axis='y', labelcolor='k')
+ax2.tick_params(axis='y', labelcolor='k', labelright=True, labelleft=False)
 
 # Far right y-axis: Glide Ratio
 ax3 = ax2.twinx()
 ax3.spines['right'].set_position(('outward', 60))
 ax3.plot(GPSData['Elapsed (s)'], GPSData['Glide_Ratio'], label='Glide Ratio', color='c')
 ax3.set_ylabel("Glide Ratio", color='c')
-ax3.tick_params(axis='y', labelcolor='c')
+ax3.tick_params(axis='y', labelcolor='c', labelright=True, labelleft=False)
 
 # X-axis
 ax1.set_xlabel("Elapsed Time (s)")
