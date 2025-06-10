@@ -25,32 +25,22 @@ root.geometry(f"{width}x{height}")
 
 
 #Buttons that do things
-#Run Wind Correction
-tk.Button(root, 
-          text="FlySight Wind Correction", 
-          command=lambda: RunTool("WindCompensation.py", script_dir), 
-          height=2, 
-          width=20
-          ).pack(pady=20)
-#Open Conversiosn Page
-tk.Button(root,
-          text="Open Conversions Calculator",
-          command=lambda: ConversionsWindow(root), 
-          height=2, 
-          width=23).pack(pady=15)
-#Open ABT Quick View
-tk.Button(root,
-          text="ABT Quick View",
-          command=lambda: RunTool("ABT_Quick_View.py", script_dir),
-          height=2, 
-          width=23).pack(pady=15)
+button_specs = [
+    ("FlySight Wind Compensation", "WindCompensation.py"),
+    ("FlySight Video Overlay", "FlySightVideo.py"),
+    ("ABT Video Overlay", "ABTVideo.py"),
+    ("IMU Video Overlay", "IMUVideo.py"),
+    ("ABT Quick View", "ABT_Quick_View.py"),
+    ("IMU Quick View", "IMUQuickView.py"),
+]
 
-#Open IMU Quick View
-tk.Button(root,
-          text="IMU Quick View",
-          command=lambda: RunTool("IMUQuickView.py", script_dir),
-          height=2, 
-          width=23).pack(pady=15)
-
+for text, script in button_specs:
+    tk.Button(
+        root,
+        text=text,
+        command=lambda s=script: RunTool(s, script_dir),
+        height=2,
+        width=23
+    ).pack(pady=15)
 
 root.mainloop()
