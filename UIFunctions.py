@@ -4,10 +4,16 @@ import subprocess
 from PIL import Image, ImageTk
 import os
 from Conversions import FeetToMeters
-import subprocess
+import sys
 
 def RunTool(Tool, location):
-  subprocess.run(["Python", Tool], cwd=location)
+    exe_name = os.path.splitext(Tool)[0] + ".exe"
+    exe_path = os.path.join(location, exe_name)
+    if os.path.exists(exe_path):
+        subprocess.run([exe_path], cwd=location)
+    else:
+        # fallback for development
+        subprocess.run(["python", Tool], cwd=location)
 
 
 def clear_root_window(root):
