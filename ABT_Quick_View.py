@@ -34,32 +34,46 @@ DataUnits["Acceleration (g)"] = np.sqrt((np.square(Data["Ax"])) + np.square(Data
 
 
 
-#Smoothing
+# Drop rows where Time is missing or invalid
+DataUnits = DataUnits.dropna(subset=["Time (s)"])
+
+# Sort by Time (s) to ensure monotonic index
+DataUnits = DataUnits.sort_values("Time (s)")
+
+# Set index to Timedelta for time-based rolling
+DataUnits = DataUnits.set_index(pd.to_timedelta(DataUnits["Time (s)"], unit='s'))
+
+# Smoothing using time-based rolling
 SmoothnessAlt = float(input("Enter filtering value for Altitude data in ms, recommend 500ms: "))
-SmoothnessAlt = int(SmoothnessAlt / 2.5)
-SmoothnessAcc = float(input("Enter filtering value for accleration in ms, recommend 100ms: "))
-SmoothnessAcc = int(SmoothnessAcc / 2.5)
-DataUnits["Smoothed Altitude MSL (ft)"] = Conversions.MetersToFeet(DataUnits["Altitude MSL (m)"].rolling(window=SmoothnessAlt, min_periods=1).mean())
-DataUnits["Smoothed Accleration (g)"] = DataUnits["Acceleration (g)"].rolling(window=SmoothnessAcc, min_periods=1).mean()
-
-#Calc ROD
-DataUnits["altitude_diff"] = DataUnits["Smoothed Altitude MSL (ft)"].diff()  # ft/s
-DataUnits["time_diff"] = DataUnits["Time (s)"].diff()  # s
-DataUnits["rate_of_descent_ftps"] = -DataUnits["altitude_diff"] / DataUnits["time_diff"]  # Negative for descent
-
-# Ensure the length of rate_of_descent matches the length of DataUnits
-DataUnits["rate_of_descent_ftps"] = DataUnits["rate_of_descent_ftps"].fillna(np.nan)  # Append NaN to make the length match
-
-#Smooth ROD
+SmoothnessAcc = float(input("Enter filtering value for acceleration in ms, recommend 100ms: "))
 SmoothnessROD = float(input("Enter filtering value for ROD in ms, recommend 500ms: "))
-SmoothnessROD = int(SmoothnessROD / 2.5)
-DataUnits["rate_of_descent_ftps"] = DataUnits["rate_of_descent_ftps"].rolling(window=SmoothnessROD, min_periods=1).mean()
+
+DataUnits["Smoothed Altitude MSL (ft)"] = Conversions.MetersToFeet(
+    DataUnits["Altitude MSL (m)"].rolling(f"{int(SmoothnessAlt)}ms", min_periods=1).mean()
+)
+DataUnits["Smoothed Acceleration (g)"] = DataUnits["Acceleration (g)"].rolling(
+    f"{int(SmoothnessAcc)}ms", min_periods=1
+).mean()
+
+# Calc ROD
+DataUnits["altitude_diff"] = DataUnits["Smoothed Altitude MSL (ft)"].diff()
+DataUnits["time_diff"] = DataUnits["Time (s)"].diff()
+DataUnits["rate_of_descent_ftps"] = -DataUnits["altitude_diff"] / DataUnits["time_diff"]
+DataUnits["rate_of_descent_ftps"] = DataUnits["rate_of_descent_ftps"].fillna(np.nan)
+
+# Smooth ROD
+DataUnits["rate_of_descent_ftps"] = DataUnits["rate_of_descent_ftps"].rolling(
+    f"{int(SmoothnessROD)}ms", min_periods=1
+).mean()
+
+# Reset index to keep "Time (s)" as a column
+DataUnits = DataUnits.reset_index(drop=True)
 
 # Create figure and axis
 fig, ax1 = plt.subplots()
 
 # Plot the first Y-axis (Acceleration)
-ax1.plot(DataUnits["Time (s)"], DataUnits["Smoothed Accleration (g)"], label="Acceleration (g)", color='g')
+ax1.plot(DataUnits["Time (s)"], DataUnits["Smoothed Acceleration (g)"], label="Acceleration (g)", color='g')
 ax1.set_xlabel("Time (s)")  # X-axis label
 ax1.set_ylabel("Acceleration (g)", color='g')  # First Y-axis label
 ax1.tick_params(axis='y', labelcolor='g')

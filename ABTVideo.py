@@ -45,7 +45,7 @@ def on_click(event):
 fig, ax1 = plt.subplots()
 ax1.plot(df['Time (s)'], df['Smoothed Altitude MSL (ft)'], label='Smoothed Altitude (ft)', color='b')
 ax2 = ax1.twinx()
-ax2.plot(df['Time (s)'], df['Smoothed Accleration (g)'], label='Smoothed Acceleration (g)', color='g')
+ax2.plot(df['Time (s)'], df['Smoothed Acceleration (g)'], label='Smoothed Acceleration (g)', color='g')
 ax1.set_xlabel("Time (s)")
 ax1.set_ylabel("Altitude MSL (ft)", color='b')
 ax2.set_ylabel("Acceleration (g)", color='g')
@@ -70,11 +70,13 @@ fps = cap.get(cv2.CAP_PROP_FPS)
 frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
-
-total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 frame_idx = 0
+total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+video_time = frame_idx / fps
+
+# --- CREATE VIDEO WRITER ---
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID' for .avi
+out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
 
 # --- Overlay parameters ---
 PLOT_EVERY_N_FRAMES = 1  # OpenCV is fast, so update every frame
@@ -87,7 +89,7 @@ plot_y = frame_height - plot_height
 # --- Precompute min/max for scaling ---
 alt_min, alt_max = df['Smoothed Altitude MSL (ft)'].min(), df['Smoothed Altitude MSL (ft)'].max()
 rod_min, rod_max = df['rate_of_descent_ftps'].min(), df['rate_of_descent_ftps'].max()
-acc_min, acc_max = df['Smoothed Accleration (g)'].min(), df['Smoothed Accleration (g)'].max()
+acc_min, acc_max = df['Smoothed Acceleration (g)'].min(), df['Smoothed Acceleration (g)'].max()
 
 with tqdm(total=total_frames, desc="Processing video frames") as pbar:
     while cap.isOpened():
@@ -123,7 +125,7 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
             t = plot_data['Time (s)'].values
             alt = plot_data['Smoothed Altitude MSL (ft)'].values
             rod = plot_data['rate_of_descent_ftps'].values
-            acc = plot_data['Smoothed Accleration (g)'].values
+            acc = plot_data['Smoothed Acceleration (g)'].values
 
             # Normalize time to plot area
             t_norm = ((t - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin
@@ -157,13 +159,14 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
             cv2.line(frame, (curr_x, plot_y + margin), (curr_x, plot_y + plot_height - margin), (255, 255, 255), 2)
 
         # --- Draw text display ---
-        current_row = df.iloc[(df['Time (s)'] - data_time).abs().argsort()[:1]]
+        idx = (df['Time (s)'] - data_time).abs().idxmin()
+        current_row = df.iloc[[idx]]
         altitude = current_row['Smoothed Altitude MSL (ft)'].values[0]
         rod = current_row['rate_of_descent_ftps'].values[0]
-        acc = current_row['Smoothed Accleration (g)'].values[0]
+        acc = current_row['Smoothed Acceleration (g)'].values[0]
 
         # Calculate max acceleration so far
-        max_acc_so_far = df[df['Time (s)'] <= data_time]['Smoothed Accleration (g)'].max()
+        max_acc_so_far = df[df['Time (s)'] <= data_time]['Smoothed Acceleration (g)'].max()
 
         info_text = [
             f"Alt: {altitude:,.0f} ft",

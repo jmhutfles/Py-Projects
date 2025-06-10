@@ -41,10 +41,16 @@ def format_and_smooth_abt_data(Data,
     """
     Formats and smooths ABT data, returning a DataFrame with all derived columns.
     """
-    import Conversions  # Ensure this import is present if you put the function elsewhere
+    import Conversions
 
     DataUnits = pd.DataFrame()
     DataUnits["Time (s)"] = Data["Time"]
+
+    # --- Drop rows where Time is missing or invalid ---
+    DataUnits = DataUnits.dropna(subset=["Time (s)"])
+
+    # --- Sort by Time (s) to ensure monotonic index ---
+    DataUnits = DataUnits.sort_values("Time (s)")
 
     # Altitude Data Formatting
     DataUnits["Altitude MSL (m)"] = 44330 * (1 - (Data["P"] / 101325) ** (1 / 5.255))
@@ -59,16 +65,15 @@ def format_and_smooth_abt_data(Data,
         np.square(Data["Ax"]) + np.square(Data["Ay"]) + np.square(Data["Az"])
     ) / 2048
 
-    # Smoothing
-    SmoothnessAlt = int(smoothness_alt_ms / 2.5)
-    SmoothnessAcc = int(smoothness_acc_ms / 2.5)
-    SmoothnessROD = int(smoothness_rod_ms / 2.5)
+    # --- Set index to Timedelta for time-based rolling ---
+    DataUnits = DataUnits.set_index(pd.to_timedelta(DataUnits["Time (s)"], unit='s'))
 
+    # Smoothing using time-based rolling
     DataUnits["Smoothed Altitude MSL (ft)"] = Conversions.MetersToFeet(
-        DataUnits["Altitude MSL (m)"].rolling(window=SmoothnessAlt, min_periods=1).mean()
+        DataUnits["Altitude MSL (m)"].rolling(f"{smoothness_alt_ms}ms", min_periods=1).mean()
     )
-    DataUnits["Smoothed Accleration (g)"] = DataUnits["Acceleration (g)"].rolling(
-        window=SmoothnessAcc, min_periods=1
+    DataUnits["Smoothed Acceleration (g)"] = DataUnits["Acceleration (g)"].rolling(
+        f"{smoothness_acc_ms}ms", min_periods=1
     ).mean()
 
     # Calc ROD
@@ -79,7 +84,10 @@ def format_and_smooth_abt_data(Data,
 
     # Smooth ROD
     DataUnits["rate_of_descent_ftps"] = DataUnits["rate_of_descent_ftps"].rolling(
-        window=SmoothnessROD, min_periods=1
+        f"{smoothness_rod_ms}ms", min_periods=1
     ).mean()
+
+    # Reset index to keep "Time (s)" as a column
+    DataUnits = DataUnits.reset_index(drop=True)
 
     return DataUnits

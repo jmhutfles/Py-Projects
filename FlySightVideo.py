@@ -333,7 +333,7 @@ with tqdm(total=total_frames, desc="Processing video frames") as pbar:
             ("Glide Ratio", (255, 255, 0)),
         ]
         legend_x = plot_x + margin + 10
-        legend_y = plot_y - 130  # Move legend further above the plot area
+        legend_y = plot_y - 160  # Move legend even further above the plot area
         legend_spacing = 35
 
         # Optional: Draw a semi-transparent background for the legend
