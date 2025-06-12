@@ -24,7 +24,7 @@ if not video_path or not output_path:
     exit()
 
 # --- LOAD DATA ---
-raw_df = ReadRawData.ReadIMU("Select the IMU file.")
+raw_df, _ = ReadRawData.ReadIMU("Select the IMU file.")
 df = Conversions.format_and_smooth_imu_data(raw_df)  # Use your smoothing function
 
 # --- Let user pick landing in IMU data by clicking the graph interactively ---

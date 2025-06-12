@@ -66,16 +66,17 @@ while True:
     elif choice == "2":
         print("Left Click to add annotation, click and hold middle mouse to move annotation, right click to delete annotation.")
         print("Click two points on the ROD axis to average between ROD calculation.")
-        ax2 = ax1.twinx()
-        line1, = ax2.plot(DataUnits["Time (s)"], DataUnits["Smoothed Altitude MSL (ft)"], color='b', label="Alt (ft)")
-        ax2.set_ylabel("Altitude MSL (ft)", color='b')
-        ax2.tick_params(axis='y', labelcolor='b')
 
-        ax3 = ax1.twinx()
-        ax3.spines['right'].set_position(('outward', 60))
-        line2, = ax3.plot(DataUnits["Time (s)"], DataUnits["rate_of_descent_ftps"], color='r', label="ROD (ft/s)")
-        ax3.set_ylabel("Rate of Descent (ft/s)", color='r')
-        ax3.tick_params(axis='y', labelcolor='r')
+        # Altitude on left, ROD on right
+        line1, = ax1.plot(DataUnits["Time (s)"], DataUnits["Smoothed Altitude MSL (ft)"], color='b', label="Alt (ft)")
+        ax1.set_xlabel("Time (s)")
+        ax1.set_ylabel("Altitude MSL (ft)", color='b')
+        ax1.tick_params(axis='y', labelcolor='b')
+
+        ax2 = ax1.twinx()
+        line2, = ax2.plot(DataUnits["Time (s)"], DataUnits["rate_of_descent_ftps"], color='r', label="ROD (ft/s)")
+        ax2.set_ylabel("Rate of Descent (ft/s)", color='r')
+        ax2.tick_params(axis='y', labelcolor='r')
 
         plt.title(file_name)
         fig.tight_layout()
@@ -101,28 +102,28 @@ while True:
         def on_click(event):
             # Prevent selection while zooming or panning
             toolbar = plt.get_current_fig_manager().toolbar
-            if toolbar.mode != '':  # '' means no active tool, otherwise it's 'zoom' or 'pan'
+            if toolbar.mode != '':
                 return
 
-            if event.inaxes == ax3 and event.button == 1:  # Left click on ROD axis
+            if event.inaxes == ax2 and event.button == 1:  # Left click on ROD axis
                 xdata = DataUnits["Time (s)"].values
                 ydata = DataUnits["rate_of_descent_ftps"].values
                 if event.xdata is None:
                     return
                 idx = (np.abs(xdata - event.xdata)).argmin()
                 rod_points.append(idx)
-                ax3.plot(xdata[idx], ydata[idx], 'ko')  # Mark the point
+                ax2.plot(xdata[idx], ydata[idx], 'ko')  # Mark the point
                 fig.canvas.draw_idle()
                 if len(rod_points) == 2:
                     idx1, idx2 = sorted(rod_points)
                     # Draw line between points
-                    ax3.plot(xdata[[idx1, idx2]], ydata[[idx1, idx2]], 'm--', lw=2)
+                    ax2.plot(xdata[[idx1, idx2]], ydata[[idx1, idx2]], 'm--', lw=2)
                     # Calculate average ROD
                     avg_rod = np.mean(ydata[idx1:idx2+1])
                     # Annotate average ROD
                     mid_time = (xdata[idx1] + xdata[idx2]) / 2
                     mid_rod = (ydata[idx1] + ydata[idx2]) / 2
-                    ax3.annotate(
+                    ax2.annotate(
                         f"Avg ROD: {avg_rod:.2f} ft/s",
                         xy=(mid_time, mid_rod),
                         xytext=(0, 30),
