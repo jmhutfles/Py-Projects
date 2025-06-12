@@ -59,7 +59,7 @@ while True:
             alt = DataUnits["Smoothed Altitude MSL (ft)"].iloc[idx]
             rod = DataUnits["rate_of_descent_ftps"].iloc[idx]
             sel.annotation.set(
-                text=f"Time: {t:.2f}s\nAcc: {acc:.2f} g\nAlt: {alt:.2f} ft\nROD: {rod:.2f} ft/s",
+                text=f"Time: {t:.2f}s\nAcc: {acc:.2f} g\nAlt: {alt:.2f} ft",
                 bbox=dict(boxstyle="round", fc="yellow", alpha=0.8)
             )
 
