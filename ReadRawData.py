@@ -102,29 +102,31 @@ def FlySightSensorRead(prompt):
 
 def ReadABT(prompt):
     DataHeaders = ["Time", "Ax", "Ay", "Az", "P", "T"]
-    
     Path = filedialog.askopenfilename(title=prompt)
+    if not Path:
+        return None, None
 
     try:
         Data = pd.read_csv(Path, skiprows=11, header=None, names=DataHeaders)
         Data = Data.apply(pd.to_numeric, errors='coerce')
         
-        return Data
+        return Data, Path
     except Exception as e:
         print(f"Failed to read file: {e}")
-        return None
+        return None, None
 
 
 def ReadIMU(prompt):
     DataHeaders = ["Time", "Ax", "Ay", "Az", "Gx", "Gy", "Gz", "Qw", "Qx", "Qy", "Qz", "Mx", "My", "Mz", "P", "T"]
 
     Path = filedialog.askopenfilename(title=prompt)
+    if not Path:
+        return None, None
 
     try:
         Data = pd.read_csv(Path, skiprows=10, header=None, names=DataHeaders)
         Data = Data.apply(pd.to_numeric, errors='coerce')
-
-        return Data
+        return Data, Path
     except Exception as e:
         print(f"Failed to read file: {e}")
-        return None
+        return None, None
