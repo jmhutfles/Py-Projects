@@ -25,7 +25,7 @@ if not video_path or not output_path:
 
 # --- LOAD DATA ---
 raw_df = ReadRawData.ReadIMU("Select the IMU file.")
-df = Conversions.format_and_smooth_abt_data(raw_df)  # Use your smoothing function
+df = Conversions.format_and_smooth_imu_data(raw_df)  # Use your smoothing function
 
 # --- Let user pick landing in IMU data by clicking the graph interactively ---
 clicked_time = []
