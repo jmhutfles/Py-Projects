@@ -25,7 +25,7 @@ if not video_path or not output_path:
     exit()
 
 # --- LOAD DATA ---
-raw_df = ReadRawData.ReadABT("Select the ABT file.")
+raw_df, _ = ReadRawData.ReadABT("Select the ABT file.")
 df = Conversions.format_and_smooth_abt_data(raw_df)
 
 # --- Let user pick landing in ABT data by clicking the graph interactively ---
