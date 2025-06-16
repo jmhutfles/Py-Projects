@@ -34,15 +34,18 @@ while True:
     if choice == "1":
         print("Left Click to add annotation, click and hold middle mouse to move annotation, right click to delete annotation.")
         # Plot Altitude and Acceleration
-        line1, = ax1.plot(DataUnits["Time (s)"], DataUnits["Smoothed Acceleration (g)"], color='g', label="Acc (g)")
+        line1, = ax1.plot(DataUnits["Time (s)"], DataUnits["Smoothed Altitude MSL (ft)"], color='g', label="Alt (ft)")
         ax1.set_xlabel("Time (s)")
-        ax1.set_ylabel("Acceleration (g)", color='g')
+        ax1.set_ylabel("Altitude MSL (ft)", color='g')
         ax1.tick_params(axis='y', labelcolor='g')
 
         ax2 = ax1.twinx()
-        line2, = ax2.plot(DataUnits["Time (s)"], DataUnits["Smoothed Altitude MSL (ft)"], color='b', label="Alt (ft)")
-        ax2.set_ylabel("Altitude MSL (ft)", color='b')
+        line2, = ax2.plot(DataUnits["Time (s)"], DataUnits["Smoothed Acceleration (g)"], color='b', label="Acc (g)")
+        ax2.set_ylabel("Acceleration (g)", color='b')
         ax2.tick_params(axis='y', labelcolor='b')
+
+        # Add a constant 1G dashed line on the acceleration axis
+        ax2.axhline(y=1, color='gray', linestyle='--', linewidth=3, label='1G Reference')
 
         plt.title(file_name)
         fig.tight_layout()
