@@ -34,49 +34,67 @@ def convert_sensor_time_to_utc(df):
 
 
 
-def format_and_smooth_abt_data(Data,):
+import numpy as np
+import pandas as pd
+
+def format_and_smooth_abt_data(Data):
     """
-    Formats and smooths ABT data, returning a DataFrame with all derived columns.
+    Formats and smooths ABT data, resampling all channels to 400 Hz and smoothing as requested.
     """
     import Conversions
 
+    # User input for smoothing windows
+    smoothness_alt_ms = int(input("Enter smoothing window for altitude (ms, default 500): ") or 500)
+    smoothness_acc_ms = int(input("Enter smoothing window for acceleration (ms, default 100): ") or 100)
+    smoothness_rod_ms = int(input("Enter smoothing window for rate of descent (ms, default 1500): ") or 1500)
 
-    smoothness_alt_ms = int(input("Enter smoothing window for altitude (ms, default 500): "))
-    smoothness_acc_ms = int(input("Enter smoothing window for acceleration (ms, default 100): "))
-    smoothness_rod_ms = int(input("Enter smoothing window for rate of descent (ms, default 1500): "))
-    
-    DataUnits = pd.DataFrame()
-    DataUnits["Time (s)"] = Data["Time"]
+    # Clean and sort
+    Data = Data.dropna(subset=["Time"])
+    Data = Data.sort_values("Time")
+    Data = Data.drop_duplicates(subset=["Time"], keep="first")
 
-    # --- Drop rows where Time is missing or invalid ---
-    DataUnits = DataUnits.dropna(subset=["Time (s)"])
+    # --- Create master time grid at 400 Hz ---
+    t_min = Data["Time"].min()
+    t_max = Data["Time"].max()
+    new_time = np.arange(t_min, t_max, 1/400)
 
-    # --- Sort by Time (s) to ensure monotonic index ---
-    DataUnits = DataUnits.sort_values("Time (s)")
+    # --- Interpolate acceleration onto new_time ---
+    ax_interp = np.interp(new_time, Data["Time"], Data["Ax"])
+    ay_interp = np.interp(new_time, Data["Time"], Data["Ay"])
+    az_interp = np.interp(new_time, Data["Time"], Data["Az"])
 
-    # Altitude Data Formatting
-    DataUnits["Altitude MSL (m)"] = 44330 * (1 - (Data["P"] / 101325) ** (1 / 5.255))
-    DataUnits["Altitude MSL (m)"] = DataUnits["Altitude MSL (m)"].ffill()
+    # --- Interpolate pressure and temperature only at their valid points ---
+    valid_p = Data[~Data["P"].isna()]
+    valid_t = Data[~Data["T"].isna()]
 
-    # Temperature Data Formatting
-    DataUnits["T (deg C)"] = Data["T"] / 1000
-    DataUnits["T (deg C)"] = DataUnits["T (deg C)"].ffill()
+    p_interp = np.interp(new_time, valid_p["Time"], valid_p["P"])
+    t_interp = np.interp(new_time, valid_t["Time"], valid_t["T"])
 
-    # Acceleration Data Formatting
-    DataUnits["Acceleration (g)"] = np.sqrt(
-        np.square(Data["Ax"]) + np.square(Data["Ay"]) + np.square(Data["Az"])
-    ) / 2048
+    # --- Calculate derived columns ---
+    altitude_msl_m = 44330 * (1 - (p_interp / 101325) ** (1 / 5.255))
+    t_deg_c = t_interp / 1000
+
+    # --- Build DataFrame ---
+    DataUnits = pd.DataFrame({
+        "Time (s)": new_time,
+        "Ax": ax_interp,
+        "Ay": ay_interp,
+        "Az": az_interp,
+        "Altitude MSL (m)": altitude_msl_m,
+        "T (deg C)": t_deg_c
+    })
 
     # --- Set index to Timedelta for time-based rolling ---
     DataUnits = DataUnits.set_index(pd.to_timedelta(DataUnits["Time (s)"], unit='s'))
 
     # Smoothing using time-based rolling
-    DataUnits["Smoothed Altitude MSL (ft)"] = Conversions.MetersToFeet(
-        DataUnits["Altitude MSL (m)"].rolling(f"{smoothness_alt_ms}ms", min_periods=1).mean()
-    )
-    DataUnits["Smoothed Acceleration (g)"] = DataUnits["Acceleration (g)"].rolling(
-        f"{smoothness_acc_ms}ms", min_periods=1
-    ).mean()
+    DataUnits["Smoothed Altitude MSL (ft)"] = Conversions.MetersToFeet(DataUnits["Altitude MSL (m)"].rolling(f"{smoothness_alt_ms}ms", min_periods=1).mean())
+    DataUnits["Smoothed Ax"] = DataUnits["Ax"].rolling(f"{smoothness_acc_ms}ms", min_periods=1).mean()
+    DataUnits["Smoothed Ay"] = DataUnits["Ay"].rolling(f"{smoothness_acc_ms}ms", min_periods=1).mean()
+    DataUnits["Smoothed Az"] = DataUnits["Az"].rolling(f"{smoothness_acc_ms}ms", min_periods=1).mean()
+
+    #Calculate RMS
+    DataUnits["Smoothed Acceleration (g)"] = np.sqrt(DataUnits["Smoothed Ax"]**2 + DataUnits["Smoothed Ay"]**2 + DataUnits["Smoothed Az"]**2) / 2048
 
     # Calc ROD
     DataUnits["altitude_diff"] = DataUnits["Smoothed Altitude MSL (ft)"].diff()
@@ -95,53 +113,65 @@ def format_and_smooth_abt_data(Data,):
     return DataUnits
 
 
+
 def format_and_smooth_imu_data(Data):
     """
-    Formats and smooths IMU data, returning a DataFrame with all derived columns.
-    Prompts user for smoothing rates in milliseconds.
+    Formats and smooths IMU data, resampling all channels to 400 Hz and smoothing as requested.
     """
     import Conversions
-    import numpy as np
-    import pandas as pd
 
-    # Prompt user for smoothing rates
-    smoothness_alt_ms = int(input("Enter smoothing window for altitude (ms, default 500): "))
-    smoothness_acc_ms = int(input("Enter smoothing window for acceleration (ms, default 100): "))
-    smoothness_rod_ms = int(input("Enter smoothing window for rate of descent (ms, default 1500): "))
+    # User input for smoothing windows
+    smoothness_alt_ms = int(input("Enter smoothing window for altitude (ms, default 500): ") or 500)
+    smoothness_acc_ms = int(input("Enter smoothing window for acceleration (ms, default 100): ") or 100)
+    smoothness_rod_ms = int(input("Enter smoothing window for rate of descent (ms, default 1500): ") or 1500)
 
+    # Clean and sort
+    Data = Data.dropna(subset=["Time"])
+    Data = Data.sort_values("Time")
+    Data = Data.drop_duplicates(subset=["Time"], keep="first")
 
-    DataUnits = pd.DataFrame()
-    DataUnits["Time (s)"] = Data["Time"]
+    # --- Create master time grid at 400 Hz ---
+    t_min = Data["Time"].min()
+    t_max = Data["Time"].max()
+    new_time = np.arange(t_min, t_max, 1/400)
 
-    # Altitude Data Formatting
-    DataUnits["Altitude MSL (m)"] = 44330 * (1 - (Data["P"] / 101325) ** (1 / 5.255))
-    DataUnits["Altitude MSL (m)"] = DataUnits["Altitude MSL (m)"].ffill()
+    # --- Interpolate acceleration onto new_time ---
+    ax_interp = np.interp(new_time, Data["Time"], Data["Ax"])
+    ay_interp = np.interp(new_time, Data["Time"], Data["Ay"])
+    az_interp = np.interp(new_time, Data["Time"], Data["Az"])
 
-    # Temperature Data Formatting
-    DataUnits["T (deg C)"] = Data["T"] / 1000
-    DataUnits["T (deg C)"] = DataUnits["T (deg C)"].ffill()
+    # --- Interpolate pressure and temperature only at their valid points ---
+    valid_p = Data[~Data["P"].isna()]
+    valid_t = Data[~Data["T"].isna()]
 
-    # Acceleration Data Formatting
-    DataUnits["Acceleration (g)"] = np.sqrt(
-        np.square(Data["Ax"]) + np.square(Data["Ay"]) + np.square(Data["Az"])
-    ) / 2048
+    p_interp = np.interp(new_time, valid_p["Time"], valid_p["P"])
+    t_interp = np.interp(new_time, valid_t["Time"], valid_t["T"])
 
-    # Drop rows where Time is missing or invalid
-    DataUnits = DataUnits.dropna(subset=["Time (s)"])
+    # --- Calculate derived columns ---
+    altitude_msl_m = 44330 * (1 - (p_interp / 101325) ** (1 / 5.255))
+    t_deg_c = t_interp / 1000
 
-    # Sort by Time (s) to ensure monotonic index
-    DataUnits = DataUnits.sort_values("Time (s)")
+    # --- Build DataFrame ---
+    DataUnits = pd.DataFrame({
+        "Time (s)": new_time,
+        "Ax": ax_interp,
+        "Ay": ay_interp,
+        "Az": az_interp,
+        "Altitude MSL (m)": altitude_msl_m,
+        "T (deg C)": t_deg_c
+    })
 
-    # Set index to Timedelta for time-based rolling
+    # --- Set index to Timedelta for time-based rolling ---
     DataUnits = DataUnits.set_index(pd.to_timedelta(DataUnits["Time (s)"], unit='s'))
 
     # Smoothing using time-based rolling
-    DataUnits["Smoothed Altitude MSL (ft)"] = Conversions.MetersToFeet(
-        DataUnits["Altitude MSL (m)"].rolling(f"{smoothness_alt_ms}ms", min_periods=1).mean()
-    )
-    DataUnits["Smoothed Acceleration (g)"] = DataUnits["Acceleration (g)"].rolling(
-        f"{smoothness_acc_ms}ms", min_periods=1
-    ).mean()
+    DataUnits["Smoothed Altitude MSL (ft)"] = Conversions.MetersToFeet(DataUnits["Altitude MSL (m)"].rolling(f"{smoothness_alt_ms}ms", min_periods=1).mean())
+    DataUnits["Smoothed Ax"] = DataUnits["Ax"].rolling(f"{smoothness_acc_ms}ms", min_periods=1).mean()
+    DataUnits["Smoothed Ay"] = DataUnits["Ay"].rolling(f"{smoothness_acc_ms}ms", min_periods=1).mean()
+    DataUnits["Smoothed Az"] = DataUnits["Az"].rolling(f"{smoothness_acc_ms}ms", min_periods=1).mean()
+
+    #Calculate RMS
+    DataUnits["Smoothed Acceleration (g)"] = np.sqrt(DataUnits["Smoothed Ax"]**2 + DataUnits["Smoothed Ay"]**2 + DataUnits["Smoothed Az"]**2) / 2048
 
     # Calc ROD
     DataUnits["altitude_diff"] = DataUnits["Smoothed Altitude MSL (ft)"].diff()
