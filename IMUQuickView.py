@@ -7,145 +7,149 @@ import Conversions
 import mplcursors
 import os
 
-root = tk.Tk()
-root.withdraw()  # Hide the root window
+def IMUQuickView():
 
-while True:
-    # Get Data and filename using ReadRawData's dialog
-    Data, file_path = ReadRawData.ReadIMU("Select the IMU file.")
-    if Data is None or file_path is None:
-        print("No file selected. Exiting.")
-        break
-    file_name = os.path.basename(file_path)
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
 
-    # Use the format_and_smooth_imu_data function from Conversions
-    DataUnits = Conversions.format_and_smooth_imu_data(Data)
-    
+    while True:
+        # Get Data and filename using ReadRawData's dialog
+        Data, file_path = ReadRawData.ReadIMU("Select the IMU file.")
+        if Data is None or file_path is None:
+            print("No file selected. Exiting.")
+            break
+        file_name = os.path.basename(file_path)
 
-    # Ask user which plot to show
-    print("Choose plot type:")
-    print("1: Altitude and Acceleration")
-    print("2: Altitude and Rate of Descent (ROD)")
-    choice = input("Enter 1 or 2: ").strip()
+        # Use the format_and_smooth_imu_data function from Conversions
+        DataUnits = Conversions.format_and_smooth_imu_data(Data)
+        
 
-    fig, ax1 = plt.subplots()
-    fig.canvas.manager.set_window_title(file_name)
+        # Ask user which plot to show
+        print("Choose plot type:")
+        print("1: Altitude and Acceleration")
+        print("2: Altitude and Rate of Descent (ROD)")
+        choice = input("Enter 1 or 2: ").strip()
 
-    if choice == "1":
-        print("Left Click to add annotation, click and hold middle mouse to move annotation, right click to delete annotation.")
-        # Plot Altitude and Acceleration
-        line1, = ax1.plot(DataUnits["Time (s)"], DataUnits["Smoothed Altitude MSL (ft)"], color='b', label="Alt (ft)")
-        ax1.set_xlabel("Time (s)")
-        ax1.set_ylabel("Altitude MSL (ft)", color='b')
-        ax1.tick_params(axis='y', labelcolor='b')
+        fig, ax1 = plt.subplots()
+        fig.canvas.manager.set_window_title(file_name)
 
-        ax2 = ax1.twinx()
-        line2, = ax2.plot(DataUnits["Time (s)"], DataUnits["Smoothed Acceleration (g)"], color='g', label="Acc (g)")
-        ax2.set_ylabel("Acceleration (g)", color='g')
-        ax2.tick_params(axis='y', labelcolor='g')
+        if choice == "1":
+            print("Left Click to add annotation, click and hold middle mouse to move annotation, right click to delete annotation.")
+            # Plot Altitude and Acceleration
+            line1, = ax1.plot(DataUnits["Time (s)"], DataUnits["Smoothed Altitude MSL (ft)"], color='b', label="Alt (ft)")
+            ax1.set_xlabel("Time (s)")
+            ax1.set_ylabel("Altitude MSL (ft)", color='b')
+            ax1.tick_params(axis='y', labelcolor='b')
 
-        # Add a constant 1G dashed line on the acceleration axis
-        ax2.axhline(y=1, color='gray', linestyle='--', linewidth=3, label='1G Reference')
+            ax2 = ax1.twinx()
+            line2, = ax2.plot(DataUnits["Time (s)"], DataUnits["Smoothed Acceleration (g)"], color='g', label="Acc (g)")
+            ax2.set_ylabel("Acceleration (g)", color='g')
+            ax2.tick_params(axis='y', labelcolor='g')
 
-        plt.title(file_name)
-        fig.tight_layout()
+            # Add a constant 1G dashed line on the acceleration axis
+            ax2.axhline(y=1, color='gray', linestyle='--', linewidth=3, label='1G Reference')
 
-        # Interactive annotations for both lines
-        cursor = mplcursors.cursor([line1, line2], hover=False, multiple=True)
+            plt.title(file_name)
+            fig.tight_layout()
 
-        @cursor.connect("add")
-        def on_add(sel):
-            x, y = sel.target
-            idx = (np.abs(DataUnits["Time (s)"] - x)).idxmin()
-            t = DataUnits["Time (s)"].iloc[idx]
-            acc = DataUnits["Smoothed Acceleration (g)"].iloc[idx]
-            alt = DataUnits["Smoothed Altitude MSL (ft)"].iloc[idx]
-            sel.annotation.set(
-                text=f"Time: {t:.2f}s\nAcc: {acc:.2f} g\nAlt: {alt:.2f} ft (MSL)",
-                bbox=dict(boxstyle="round", fc="yellow", alpha=0.8)
-            )
+            # Interactive annotations for both lines
+            cursor = mplcursors.cursor([line1, line2], hover=False, multiple=True)
 
-    elif choice == "2":
-        # Plot Altitude and ROD
-        print("Left Click to add annotation, click and hold middle mouse to move annotation, right click to delete annotation.")
-        print("Click two points on the ROD axis to average between ROD calculation.")
+            @cursor.connect("add")
+            def on_add(sel):
+                x, y = sel.target
+                idx = (np.abs(DataUnits["Time (s)"] - x)).idxmin()
+                t = DataUnits["Time (s)"].iloc[idx]
+                acc = DataUnits["Smoothed Acceleration (g)"].iloc[idx]
+                alt = DataUnits["Smoothed Altitude MSL (ft)"].iloc[idx]
+                sel.annotation.set(
+                    text=f"Time: {t:.2f}s\nAcc: {acc:.2f} g\nAlt: {alt:.2f} ft (MSL)",
+                    bbox=dict(boxstyle="round", fc="yellow", alpha=0.8)
+                )
 
-        # Altitude on left, ROD on right
-        line1, = ax1.plot(DataUnits["Time (s)"], DataUnits["Smoothed Altitude MSL (ft)"], color='b', label="Alt (ft)")
-        ax1.set_xlabel("Time (s)")
-        ax1.set_ylabel("Altitude MSL (ft)", color='b')
-        ax1.tick_params(axis='y', labelcolor='b')
+        elif choice == "2":
+            # Plot Altitude and ROD
+            print("Left Click to add annotation, click and hold middle mouse to move annotation, right click to delete annotation.")
+            print("Click two points on the ROD axis to average between ROD calculation.")
 
-        ax2 = ax1.twinx()
-        line2, = ax2.plot(DataUnits["Time (s)"], DataUnits["rate_of_descent_ftps"], color='r', label="ROD (ft/s)")
-        ax2.set_ylabel("Rate of Descent (ft/s)", color='r')
-        ax2.tick_params(axis='y', labelcolor='r')
+            # Altitude on left, ROD on right
+            line1, = ax1.plot(DataUnits["Time (s)"], DataUnits["Smoothed Altitude MSL (ft)"], color='b', label="Alt (ft)")
+            ax1.set_xlabel("Time (s)")
+            ax1.set_ylabel("Altitude MSL (ft)", color='b')
+            ax1.tick_params(axis='y', labelcolor='b')
 
-        plt.title(file_name)
-        fig.tight_layout()
+            ax2 = ax1.twinx()
+            line2, = ax2.plot(DataUnits["Time (s)"], DataUnits["rate_of_descent_ftps"], color='r', label="ROD (ft/s)")
+            ax2.set_ylabel("Rate of Descent (ft/s)", color='r')
+            ax2.tick_params(axis='y', labelcolor='r')
 
-        # Interactive annotations for both lines
-        cursor = mplcursors.cursor([line1, line2], hover=False, multiple=True)
+            plt.title(file_name)
+            fig.tight_layout()
 
-        @cursor.connect("add")
-        def on_add(sel):
-            x, y = sel.target
-            idx = (np.abs(DataUnits["Time (s)"] - x)).idxmin()
-            alt = DataUnits["Smoothed Altitude MSL (ft)"].iloc[idx]
-            rod = DataUnits["rate_of_descent_ftps"].iloc[idx]
-            t = DataUnits["Time (s)"].iloc[idx]
-            sel.annotation.set(
-                text=f"Time: {t:.2f}s\nAlt: {alt:.2f} ft (MSL)\nROD: {rod:.2f} ft/s",
-                bbox=dict(boxstyle="round", fc="yellow", alpha=0.8)
-            )
+            # Interactive annotations for both lines
+            cursor = mplcursors.cursor([line1, line2], hover=False, multiple=True)
 
-        # --- Custom ROD interval selection ---
-        rod_points = []
+            @cursor.connect("add")
+            def on_add(sel):
+                x, y = sel.target
+                idx = (np.abs(DataUnits["Time (s)"] - x)).idxmin()
+                alt = DataUnits["Smoothed Altitude MSL (ft)"].iloc[idx]
+                rod = DataUnits["rate_of_descent_ftps"].iloc[idx]
+                t = DataUnits["Time (s)"].iloc[idx]
+                sel.annotation.set(
+                    text=f"Time: {t:.2f}s\nAlt: {alt:.2f} ft (MSL)\nROD: {rod:.2f} ft/s",
+                    bbox=dict(boxstyle="round", fc="yellow", alpha=0.8)
+                )
 
-        def on_click(event):
-            # Prevent selection while zooming or panning
-            toolbar = plt.get_current_fig_manager().toolbar
-            if toolbar.mode != '':
-                return
+            # --- Custom ROD interval selection ---
+            rod_points = []
 
-            if event.inaxes == ax2 and event.button == 1:  # Left click on ROD axis
-                xdata = DataUnits["Time (s)"].values
-                ydata = DataUnits["rate_of_descent_ftps"].values
-                if event.xdata is None:
+            def on_click(event):
+                # Prevent selection while zooming or panning
+                toolbar = plt.get_current_fig_manager().toolbar
+                if toolbar.mode != '':
                     return
-                idx = (np.abs(xdata - event.xdata)).argmin()
-                rod_points.append(idx)
-                ax2.plot(xdata[idx], ydata[idx], 'ko')  # Mark the point
-                fig.canvas.draw_idle()
-                if len(rod_points) == 2:
-                    idx1, idx2 = sorted(rod_points)
-                    # Draw line between points
-                    ax2.plot(xdata[[idx1, idx2]], ydata[[idx1, idx2]], 'm--', lw=2)
-                    # Calculate average ROD
-                    avg_rod = np.mean(ydata[idx1:idx2+1])
-                    # Annotate average ROD
-                    mid_time = (xdata[idx1] + xdata[idx2]) / 2
-                    mid_rod = (ydata[idx1] + ydata[idx2]) / 2
-                    ax2.annotate(
-                        f"Avg ROD: {avg_rod:.2f} ft/s",
-                        xy=(mid_time, mid_rod),
-                        xytext=(0, 30),
-                        textcoords="offset points",
-                        ha='center',
-                        bbox=dict(boxstyle="round", fc="yellow", alpha=0.8),
-                        arrowprops=dict(arrowstyle="->", color='magenta')
-                    )
+
+                if event.inaxes == ax2 and event.button == 1:  # Left click on ROD axis
+                    xdata = DataUnits["Time (s)"].values
+                    ydata = DataUnits["rate_of_descent_ftps"].values
+                    if event.xdata is None:
+                        return
+                    idx = (np.abs(xdata - event.xdata)).argmin()
+                    rod_points.append(idx)
+                    ax2.plot(xdata[idx], ydata[idx], 'ko')  # Mark the point
                     fig.canvas.draw_idle()
-                    rod_points.clear()  # Reset for next selection
+                    if len(rod_points) == 2:
+                        idx1, idx2 = sorted(rod_points)
+                        # Draw line between points
+                        ax2.plot(xdata[[idx1, idx2]], ydata[[idx1, idx2]], 'm--', lw=2)
+                        # Calculate average ROD
+                        avg_rod = np.mean(ydata[idx1:idx2+1])
+                        # Annotate average ROD
+                        mid_time = (xdata[idx1] + xdata[idx2]) / 2
+                        mid_rod = (ydata[idx1] + ydata[idx2]) / 2
+                        ax2.annotate(
+                            f"Avg ROD: {avg_rod:.2f} ft/s",
+                            xy=(mid_time, mid_rod),
+                            xytext=(0, 30),
+                            textcoords="offset points",
+                            ha='center',
+                            bbox=dict(boxstyle="round", fc="yellow", alpha=0.8),
+                            arrowprops=dict(arrowstyle="->", color='magenta')
+                        )
+                        fig.canvas.draw_idle()
+                        rod_points.clear()  # Reset for next selection
 
-        fig.canvas.mpl_connect("button_press_event", on_click)
+            fig.canvas.mpl_connect("button_press_event", on_click)
 
-    else:
-        print("Invalid choice. Please enter 1 or 2.")
-        continue
+        else:
+            print("Invalid choice. Please enter 1 or 2.")
+            continue
 
-    plt.show()
+        plt.show()
 
-    again = input("Process another IMU file? (y/n): ").strip().lower()
-    if again != 'y':
-        break
+        again = input("Process another IMU file? (y/n): ").strip().lower()
+        if again != 'y':
+            break
+if __name__ == "__main__":
+    IMUQuickView()

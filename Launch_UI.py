@@ -38,7 +38,7 @@ for text, script in button_specs:
     tk.Button(
         root,
         text=text,
-        command=lambda s=script: RunTool(s, script_dir),
+        command=lambda s=script: RunTool(s, script_dir, root),
         height=2,
         width=23
     ).pack(pady=15)
