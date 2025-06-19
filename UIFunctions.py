@@ -6,16 +6,51 @@ import os
 from Conversions import FeetToMeters
 import sys
 
-def RunTool(Tool, location):
-    # Always use the directory of the running executable or script
-    base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(sys.argv[0])))
-    exe_name = os.path.splitext(Tool)[0] + ".exe"
-    exe_path = os.path.join(base_dir, exe_name)
-    if os.path.exists(exe_path):
-        subprocess.run([exe_path], cwd=base_dir)
+def RunTool(Tool, location, root=None):
+    def hide_and_run(func):
+        if root is not None:
+            root.withdraw()
+        func()
+        if root is not None:
+            root.deiconify()
+
+    if Tool == "ABT_Quick_View.py":
+        from ABT_Quick_View import run_abt_quick_view
+        hide_and_run(run_abt_quick_view)
+    elif Tool == "ABTVideo.py":
+        from ABTVideo import run_abt_video_overlay
+        hide_and_run(run_abt_video_overlay)
+    elif Tool == "IMUQuickView.py":
+        from IMUQuickView import IMUQuickView
+        hide_and_run(IMUQuickView)
+    elif Tool == "IMUVideo.py":
+        from IMUVideo import IMUVideo
+        hide_and_run(IMUVideo)
+    elif Tool == "FlySightVideo.py":
+        from FlySightVideo import FlySightVideo
+        hide_and_run(FlySightVideo)
+    elif Tool == "WindCompensation.py":
+        from WindCompensation import WindCompensation
+        hide_and_run(WindCompensation)
     else:
         # fallback for development
-        subprocess.run(["python", Tool], cwd=base_dir)
+        import sys
+        import os
+        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(sys.argv[0])))
+        exe_name = os.path.splitext(Tool)[0] + ".exe"
+        exe_path = os.path.join(base_dir, exe_name)
+        if os.path.exists(exe_path):
+            if root is not None:
+                root.withdraw()
+            subprocess.run([exe_path], cwd=base_dir)
+            if root is not None:
+                root.deiconify()
+        else:
+            if root is not None:
+                root.withdraw()
+            subprocess.run(["python", Tool], cwd=base_dir)
+            if root is not None:
+                root.deiconify()
 
 
 def clear_root_window(root):
