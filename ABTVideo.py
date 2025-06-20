@@ -83,16 +83,11 @@ def run_abt_video_overlay():
 
         # --- Overlay parameters ---
         PLOT_EVERY_N_FRAMES = 1  # OpenCV is fast, so update every frame
-        plot_win = 5  # seconds before and after current time
+        plot_win = 10  # seconds before and after current time
         plot_width = int(frame_width * 0.8)
         plot_height = int(frame_height * 0.45)
         plot_x = 0
         plot_y = frame_height - plot_height
-
-        # --- Precompute min/max for scaling ---
-        alt_min, alt_max = df['Smoothed Altitude MSL (ft)'].min(), df['Smoothed Altitude MSL (ft)'].max()
-        rod_min, rod_max = df['rate_of_descent_ftps'].min(), df['rate_of_descent_ftps'].max()
-        acc_min, acc_max = df['Smoothed Acceleration (g)'].min(), df['Smoothed Acceleration (g)'].max()
 
         with tqdm(total=total_frames, desc="Processing video frames") as pbar:
             while cap.isOpened():
@@ -123,12 +118,16 @@ def run_abt_video_overlay():
                 # X axis
                 cv2.line(frame, (plot_x + margin, plot_y + plot_height - margin), (plot_x + plot_width - margin, plot_y + plot_height - margin), axis_color, 1)
 
-                # --- Draw data lines ---
+                # --- Plot windowed data ---
                 if len(plot_data) > 1:
                     t = plot_data['Time (s)'].values
                     alt = plot_data['Smoothed Altitude MSL (ft)'].values
                     rod = plot_data['rate_of_descent_ftps'].values
                     acc = plot_data['Smoothed Acceleration (g)'].values
+
+                    alt_min, alt_max = alt.min(), alt.max()
+                    rod_min, rod_max = rod.min(), rod.max()
+                    acc_min, acc_max = acc.min(), acc.max()
 
                     # Normalize time to plot area
                     t_norm = ((t - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin
@@ -165,24 +164,40 @@ def run_abt_video_overlay():
                 idx = (df['Time (s)'] - data_time).abs().idxmin()
                 current_row = df.iloc[[idx]]
                 altitude = current_row['Smoothed Altitude MSL (ft)'].values[0]
-                rod = current_row['rate_of_descent_ftps'].values[0]
                 acc = current_row['Smoothed Acceleration (g)'].values[0]
 
                 # Calculate max acceleration so far
                 max_acc_so_far = df[df['Time (s)'] <= data_time]['Smoothed Acceleration (g)'].max()
 
+                # Calculate 7s rolling average for ROD
+                rolling_window = 7.0
+                recent_rod = df[(df['Time (s)'] >= data_time - rolling_window) & (df['Time (s)'] <= data_time)]['rate_of_descent_ftps']
+                rod_avg = recent_rod.mean() if not recent_rod.empty else float('nan')
+
+                # Prepare info text
                 info_text = [
                     f"Alt: {altitude:,.0f} ft",
-                    f"ROD: {rod:,.1f} ft/s",
+                    f"ROD (7s avg): {rod_avg:.1f} ft/s",
                     f"Acc: {acc:,.2f} g",
                     f"Max Acc: {max_acc_so_far:.2f} g"
                 ]
+
                 # Calculate starting x/y for upper right
                 text_margin = 20
                 text_height = 30
-                start_x = frame_width - 350  # Adjust width as needed for your text length
+                start_x = frame_width - 370  # Move left a bit for wider box
                 start_y = text_margin + text_height  # Move to upper right
 
+                # Draw gray background for live data display (make it bigger)
+                info_bg_x = start_x - 30
+                info_bg_y = start_y - text_height
+                info_bg_w = 370  # Wider box
+                info_bg_h = text_height * len(info_text) + 30  # Taller box
+                overlay = frame.copy()
+                cv2.rectangle(overlay, (info_bg_x, info_bg_y), (info_bg_x + info_bg_w, info_bg_y + info_bg_h), (50, 50, 50), -1)
+                frame = cv2.addWeighted(overlay, 0.6, frame, 0.4, 0)
+
+                # Draw info text
                 for i, line in enumerate(info_text):
                     cv2.putText(
                         frame, line,
@@ -224,15 +239,7 @@ def run_abt_video_overlay():
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA
                 )
 
-                # X-axis ticks and labels (Time)
-                for i, val in enumerate(np.linspace(x_min, x_max, 5)):
-                    x = int(((val - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin)
-                    y = plot_y + plot_height - margin
-                    cv2.line(frame, (x, y), (x, y + 7), (200, 200, 200), 1)
-                    cv2.putText(
-                        frame, f"{val:.1f}", (x - 15, y + 25),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1, cv2.LINE_AA
-                    )
+                
 
                 # Plot title (top center of plot area)
                 plot_title = "ABT Data Overlay"
@@ -261,6 +268,17 @@ def run_abt_video_overlay():
                     frame, "Acc (g)", (acc_axis_x - 55, plot_y + margin - 25),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA
                 )
+
+                # Draw X axis time scale: only -10 and +10
+                for i, val in enumerate([x_min, x_max]):
+                    x = int(((val - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin)
+                    y = plot_y + plot_height - margin
+                    cv2.line(frame, (x, y), (x, y + 8), (220, 220, 220), 2)
+                    label = "-10" if i == 0 else "+10"
+                    cv2.putText(
+                        frame, label, (x - 25 if i == 0 else x - 10, y + 28),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (220, 220, 220), 2, cv2.LINE_AA
+                    )
 
                 out.write(frame)
                 frame_idx += 1

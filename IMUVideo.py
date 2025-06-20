@@ -79,15 +79,11 @@ def IMUVideo():
         out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
 
         # --- Overlay parameters ---
-        plot_win = 5
+        plot_win = 10  # seconds before and after current time
         plot_width = int(frame_width * 0.8)
         plot_height = int(frame_height * 0.45)
         plot_x = 0
         plot_y = frame_height - plot_height
-
-        # --- Precompute min/max for scaling ---
-        rod_min, rod_max = df['rate_of_descent_ftps'].min(), df['rate_of_descent_ftps'].max()
-        acc_min, acc_max = df['Smoothed Acceleration (g)'].min(), df['Smoothed Acceleration (g)'].max()
 
         with tqdm(total=total_frames, desc="Processing video frames") as pbar:
             while cap.isOpened():
@@ -105,10 +101,17 @@ def IMUVideo():
 
                 # --- Auto-scale axes for the current window ---
                 if len(plot_data) > 1:
-                    rod_min, rod_max = plot_data['rate_of_descent_ftps'].min(), plot_data['rate_of_descent_ftps'].max()
-                    acc_min, acc_max = plot_data['Smoothed Acceleration (g)'].min(), plot_data['Smoothed Acceleration (g)'].max()
+                    t = plot_data['Time (s)'].values
+                    alt = plot_data['Smoothed Altitude MSL (ft)'].values
+                    rod = plot_data['rate_of_descent_ftps'].values
+                    acc = plot_data['Smoothed Acceleration (g)'].values
+
+                    alt_min, alt_max = alt.min(), alt.max()
+                    rod_min, rod_max = rod.min(), rod.max()
+                    acc_min, acc_max = acc.min(), acc.max()
                 else:
-                    # fallback to global min/max if not enough data
+                    t = alt = rod = acc = np.array([])
+                    alt_min, alt_max = df['Smoothed Altitude MSL (ft)'].min(), df['Smoothed Altitude MSL (ft)'].max()
                     rod_min, rod_max = df['rate_of_descent_ftps'].min(), df['rate_of_descent_ftps'].max()
                     acc_min, acc_max = df['Smoothed Acceleration (g)'].min(), df['Smoothed Acceleration (g)'].max()
 
@@ -118,57 +121,28 @@ def IMUVideo():
                 alpha = 0.3
                 frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
 
-                # --- Draw axes and labels ---
+                # --- Draw axes ---
                 margin = 55
                 axis_color = (200, 200, 200)
-                # Left y-axis for ROD (auto-scaled)
+                # Y axes for each variable
                 cv2.line(frame, (plot_x + margin, plot_y), (plot_x + margin, plot_y + plot_height), axis_color, 1)
-                # Right y-axis for Acceleration
                 cv2.line(frame, (plot_x + plot_width - margin, plot_y), (plot_x + plot_width - margin, plot_y + plot_height), axis_color, 1)
                 # X axis
                 cv2.line(frame, (plot_x + margin, plot_y + plot_height - margin), (plot_x + plot_width - margin, plot_y + plot_height - margin), axis_color, 1)
 
-                # --- Draw axes and labels ---
-                margin = 55
-                axis_color = (200, 200, 200)
-                # ... draw axes code ...
-
-                # --- Draw X axis time scale ---
-                num_ticks = 5  # Number of time ticks to show
-                tick_length = 8
-                for i in range(num_ticks + 1):
-                    tick_time = x_min + i * (x_max - x_min) / num_ticks
-                    tick_x = int(((tick_time - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin)
-                    tick_y1 = plot_y + plot_height - margin
-                    tick_y2 = tick_y1 + tick_length
-                    cv2.line(frame, (tick_x, tick_y1), (tick_x, tick_y2), (220, 220, 220), 2)
-                    cv2.putText(
-                        frame, f"{tick_time:.1f}s",
-                        (tick_x - 18, tick_y2 + 22),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (220, 220, 220), 2, cv2.LINE_AA
-                    )
-            
-                # ROD axis label (auto-scaled)
-                rod_axis_x = plot_x + margin - 50
-                cv2.putText(frame, f"{rod_max:.1f} ft/s", (rod_axis_x, plot_y + margin + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
-                cv2.putText(frame, f"{rod_min:.1f} ft/s", (rod_axis_x, plot_y + plot_height - margin), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
-                cv2.putText(frame, "ROD", (rod_axis_x, plot_y + plot_height // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
-
-                # Acceleration axis label (auto-scaled)
-                acc_axis_x = plot_x + plot_width - margin + 10
-                cv2.putText(frame, f"{acc_max:.2f} g", (acc_axis_x, plot_y + margin + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
-                cv2.putText(frame, f"{acc_min:.2f} g", (acc_axis_x, plot_y + plot_height - margin), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
-                cv2.putText(frame, "Acc", (acc_axis_x, plot_y + plot_height // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
-
-                # --- Draw data lines ---
+                # --- Plot windowed data ---
                 if len(plot_data) > 1:
-                    t = plot_data['Time (s)'].values
-                    rod = plot_data['rate_of_descent_ftps'].values
-                    acc = plot_data['Smoothed Acceleration (g)'].values
-
                     t_norm = ((t - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin
 
-                    # ROD (red, left y-axis)
+                    # Altitude (blue)
+                    alt_norm = (alt - alt_min) / (alt_max - alt_min + 1e-6)
+                    alt_norm = plot_y + plot_height - margin - alt_norm * (plot_height - 2 * margin)
+                    for i in range(1, len(t)):
+                        pt1 = (int(t_norm[i-1]), int(alt_norm[i-1]))
+                        pt2 = (int(t_norm[i]), int(alt_norm[i]))
+                        cv2.line(frame, pt1, pt2, (255, 200, 0), 2)
+
+                    # ROD (red)
                     rod_norm = (rod - rod_min) / (rod_max - rod_min + 1e-6)
                     rod_norm = plot_y + plot_height - margin - rod_norm * (plot_height - 2 * margin)
                     for i in range(1, len(t)):
@@ -176,7 +150,7 @@ def IMUVideo():
                         pt2 = (int(t_norm[i]), int(rod_norm[i]))
                         cv2.line(frame, pt1, pt2, (0, 0, 255), 2)
 
-                    # Acceleration (green, right y-axis)
+                    # Acceleration (green)
                     acc_norm = (acc - acc_min) / (acc_max - acc_min + 1e-6)
                     acc_norm = plot_y + plot_height - margin - acc_norm * (plot_height - 2 * margin)
                     for i in range(1, len(t)):
@@ -188,31 +162,95 @@ def IMUVideo():
                     curr_x = int(((data_time - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin)
                     cv2.line(frame, (curr_x, plot_y + margin), (curr_x, plot_y + plot_height - margin), (255, 255, 255), 2)
 
-                    # --- Draw legend just above the plot ---
-                    legend_y = plot_y - 15
-                    cv2.putText(frame, "ROD (ft/s)", (plot_x + margin, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
-                    cv2.putText(frame, "Acc (g)", (plot_x + margin + 180, legend_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
+                
 
-                # --- Draw text display ---
+                # --- Y-axis (left) ticks and labels for Altitude ---
+                for i, val in enumerate(np.linspace(alt_min, alt_max, 5)):
+                    y = int(plot_y + plot_height - margin - ((val - alt_min) / (alt_max - alt_min + 1e-6)) * (plot_height - 2 * margin))
+                    cv2.line(frame, (plot_x + margin - 7, y), (plot_x + margin, y), (200, 200, 200), 1)
+                    cv2.putText(
+                        frame, f"{int(val):d}", (plot_x + 2, y + 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 200, 0), 1, cv2.LINE_AA
+                    )
+                # Altitude label
+                cv2.putText(
+                    frame, "Alt (ft)", (plot_x + 2, plot_y + margin - 25),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 200, 0), 2, cv2.LINE_AA
+                )
+
+                # --- Y-axis (right) ticks and labels for ROD ---
+                for i, val in enumerate(np.linspace(rod_min, rod_max, 5)):
+                    y = int(plot_y + plot_height - margin - ((val - rod_min) / (rod_max - rod_min + 1e-6)) * (plot_height - 2 * margin))
+                    cv2.line(frame, (plot_x + plot_width - margin, y), (plot_x + plot_width - margin + 7, y), (200, 200, 200), 1)
+                    cv2.putText(
+                        frame, f"{val:.0f}", (plot_x + plot_width - margin + 10, y + 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 1, cv2.LINE_AA
+                    )
+                # ROD label
+                cv2.putText(
+                    frame, "ROD (ft/s)", (plot_x + plot_width - margin + 5, plot_y + margin - 25),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA
+                )
+
+                # --- Acceleration axis (inside left, green) ---
+                acc_axis_x = plot_x + margin + 100
+                for i, val in enumerate(np.linspace(acc_min, acc_max, 5)):
+                    y = int(plot_y + plot_height - margin - ((val - acc_min) / (acc_max - acc_min + 1e-6)) * (plot_height - 2 * margin))
+                    cv2.line(frame, (acc_axis_x - 10, y), (acc_axis_x, y), (0, 255, 0), 2)
+                    cv2.putText(
+                        frame, f"{val:.2f}", (acc_axis_x - 55, y + 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1, cv2.LINE_AA
+                    )
+                # Acceleration label
+                cv2.putText(
+                    frame, "Acc (g)", (acc_axis_x - 55, plot_y + margin - 25),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA
+                )
+
+                # --- Draw X axis time scale: only -10 and +10 ---
+                for i, val in enumerate([x_min, x_max]):
+                    x = int(((val - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin)
+                    y = plot_y + plot_height - margin
+                    cv2.line(frame, (x, y), (x, y + 8), (220, 220, 220), 2)
+                    label = "-10" if i == 0 else "+10"
+                    cv2.putText(
+                        frame, label, (x - 25 if i == 0 else x - 10, y + 28),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (220, 220, 220), 2, cv2.LINE_AA
+                    )
+
+                # --- Draw text display (top right, gray box, 7s avg for ROD) ---
                 idx = (df['Time (s)'] - data_time).abs().idxmin()
                 current_row = df.iloc[[idx]]
                 altitude = current_row['Smoothed Altitude MSL (ft)'].values[0]
-                acc = current_row['Smoothed Acceleration (g)'].values[0]
-                rod_val = current_row['rate_of_descent_ftps'].values[0]
+                acc_val = current_row['Smoothed Acceleration (g)'].values[0]
 
-                # Calculate max acceleration so far
+                # 7s rolling average for ROD
+                rolling_window = 7.0
+                recent_rod = df[(df['Time (s)'] >= data_time - rolling_window) & (df['Time (s)'] <= data_time)]['rate_of_descent_ftps']
+                rod_avg = recent_rod.mean() if not recent_rod.empty else float('nan')
+
+                # Max acceleration so far
                 max_acc_so_far = df[df['Time (s)'] <= data_time]['Smoothed Acceleration (g)'].max()
 
                 info_text = [
                     f"Alt: {altitude:,.0f} ft",
-                    f"Acc: {acc:,.2f} g",
-                    f"ROD: {rod_val:,.1f} ft/s",
+                    f"ROD (7s avg): {rod_avg:.1f} ft/s",
+                    f"Acc: {acc_val:.2f} g",
                     f"Max Acc: {max_acc_so_far:.2f} g"
                 ]
                 text_margin = 20
                 text_height = 30
-                start_x = frame_width - 350
+                start_x = frame_width - 370
                 start_y = text_margin + text_height
+
+                # Draw gray background for live data display (make it bigger)
+                info_bg_x = start_x - 30
+                info_bg_y = start_y - text_height
+                info_bg_w = 370
+                info_bg_h = text_height * len(info_text) + 30
+                overlay = frame.copy()
+                cv2.rectangle(overlay, (info_bg_x, info_bg_y), (info_bg_x + info_bg_w, info_bg_y + info_bg_h), (50, 50, 50), -1)
+                frame = cv2.addWeighted(overlay, 0.6, frame, 0.4, 0)
 
                 for i, line in enumerate(info_text):
                     cv2.putText(
