@@ -67,7 +67,7 @@ def FlySightVideo():
         # Left y-axis: Altitude
         ax1.plot(GPSData['Elapsed (s)'], GPSData['Altitude_ft'], label='Altitude (ft)', color='b')
         ax1.set_ylabel("Altitude (ft)", color='b')
-        ax1.tick_params(axis='y', labelcolor='b', labelright=False, labelleft=True)
+        ax1.tick_params(axis='y', labelcolor='b', left=True, right=False, labelleft=True, labelright=False)
 
         # Right y-axis: Speeds
         ax2 = ax1.twinx()
@@ -75,14 +75,14 @@ def FlySightVideo():
         ax2.plot(GPSData['Elapsed (s)'], GPSData['Horiz_Speed_mph'], label='Horiz Spd (mph)', color='g')
         ax2.plot(GPSData['Elapsed (s)'], GPSData['Total_Speed_mph'], label='Total Spd (mph)', color='m')
         ax2.set_ylabel("Speed (mph)", color='k')
-        ax2.tick_params(axis='y', labelcolor='k', labelright=True, labelleft=False)
+        ax2.tick_params(axis='y', labelcolor='k', left=False, right=True, labelleft=False, labelright=True)
 
         # Far right y-axis: Glide Ratio
         ax3 = ax2.twinx()
         ax3.spines['right'].set_position(('outward', 60))
         ax3.plot(GPSData['Elapsed (s)'], GPSData['Glide_Ratio'], label='Glide Ratio', color='c')
         ax3.set_ylabel("Glide Ratio", color='c')
-        ax3.tick_params(axis='y', labelcolor='c', labelright=True, labelleft=False)
+        ax3.tick_params(axis='y', labelcolor='c', left=False, right=True, labelleft=False, labelright=True)
 
         # X-axis
         ax1.set_xlabel("Elapsed Time (s)")
@@ -122,7 +122,7 @@ def FlySightVideo():
         frame_idx = 0
 
         # --- Overlay parameters ---
-        plot_win = 5  # seconds before and after current time
+        plot_win = 10  # seconds before and after current time
         plot_width = int(frame_width * 0.8)
         plot_height = int(frame_height * 0.45)
         plot_x = 0
@@ -251,13 +251,25 @@ def FlySightVideo():
                         curr_x = int(((data_time_clamped - x_min) / (x_max - x_min + 1e-6)) * (plot_width - 2 * margin) + plot_x + margin)
                         cv2.line(frame, (curr_x, plot_y + margin), (curr_x, plot_y + plot_height - margin), (255, 255, 255), 2)
 
-                    # --- Draw text display (upper right) ---
+                    # --- Rolling averages for stats ---
+                    rolling_window = 7.0
+                    recent_data = GPSData[(GPSData['Elapsed (s)'] >= data_time_clamped - rolling_window) & (GPSData['Elapsed (s)'] <= data_time_clamped)]
+
+                    if not recent_data.empty:
+                        down_vel_mph_avg = recent_data['Down_Vel_mph'].mean()
+                        horiz_speed_mph_avg = recent_data['Horiz_Speed_mph'].mean()
+                        total_speed_mph_avg = recent_data['Total_Speed_mph'].mean()
+                        glide_ratio_avg = recent_data['Glide_Ratio'].mean()
+                    else:
+                        down_vel_mph_avg = horiz_speed_mph_avg = total_speed_mph_avg = glide_ratio_avg = float('nan')
+
                     info_text = [
+                        "Live Data (7s avg):",
                         f"Alt: {altitude_ft:,.0f} ft",
-                        f"Vert Spd: {down_vel_mph:.1f} mph",
-                        f"Horiz Spd: {horiz_speed_mph:.1f} mph",
-                        f"Total Spd: {total_speed_mph:.1f} mph",
-                        f"Glide: {glide_ratio:.2f}"
+                        f"Vert Spd: {down_vel_mph_avg:.1f} mph",
+                        f"Horiz Spd: {horiz_speed_mph_avg:.1f} mph",
+                        f"Total Spd: {total_speed_mph_avg:.1f} mph",
+                        f"Glide: {glide_ratio_avg:.2f}"
                     ]
                     text_margin = 20
                     text_height = 30
@@ -318,13 +330,13 @@ def FlySightVideo():
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA  # White label
                     )
 
-                    # X-axis: Only show -5 seconds (left) and +5 seconds (right)
+                    # X-axis: Only show -10 seconds (left) and +10 seconds (right)
                     cv2.putText(
-                        frame, "-5 seconds", (plot_x + margin - 30, plot_y + plot_height - 15),
+                        frame, "-10 seconds", (plot_x + margin - 30, plot_y + plot_height - 15),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA
                     )
                     cv2.putText(
-                        frame, "+5 seconds", (plot_x + plot_width - margin - 60, plot_y + plot_height - 15),
+                        frame, "+10 seconds", (plot_x + plot_width - margin - 60, plot_y + plot_height - 15),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA
                     )
                 # --- Draw legend ---
