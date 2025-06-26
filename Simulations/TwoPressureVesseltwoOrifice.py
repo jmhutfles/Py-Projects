@@ -13,7 +13,7 @@ cv = R / (gamma - 1)
 
 # Orifice and upstream conditions
 Cd = 0.65
-orifice_diameter1 = 0.00635  # Orifice 1 (upstream to vessel 1)
+orifice_diameter1 = 0.0007874  # Orifice 1 (upstream to vessel 1)
 orifice_diameter2 = 0.0007874  # Orifice 2 (vessel 1 to vessel 2)
 A_orifice1 = np.pi * (orifice_diameter1 / 2)**2
 A_orifice2 = np.pi * (orifice_diameter2 / 2)**2
@@ -29,7 +29,7 @@ P0_2 = 1e5 # Initial pressure for vessel 2 [Pa]
 T0_2 = 300.0 # Initial temperature for vessel 2 [K]
 
 # Simulation settings
-dt = 0.001 # Time step [s]
+dt = 0.01 # Time step [s]
 t_max = 10000 # Max simulation time [s]
 time = np.arange(0, t_max, dt)
 
