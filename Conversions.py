@@ -216,8 +216,22 @@ def format_and_smooth_FS_data():
     Data = ReadRawData.FlySightSensorRead("Select the Sensor FLysight file.")
     Data = convert_sensor_time_to_utc(Data)
     GPSData = ReadRawData.LoadFlysightData("Select the GPS Flysight file.")
-    accel_window_ms = tkinter.simpledialog.askinteger("Input", "Enter acceleration filter window (ms):", minvalue=1)
-    pressure_window_ms = tkinter.simpledialog.askinteger("Input", "Enter pressure altitiude filter window (ms):", minvalue=1)
+    
+    # Ask user for filter window sizes in ms (command prompt)
+
+    while True:
+        try:
+            accel_window_ms = int(input("Enter acceleration filter window (ms, default 100ms): "))
+            break
+        except ValueError:
+            print("Please enter a valid integer.")
+
+    while True:
+        try:
+            pressure_window_ms = int(input("Enter pressure altitude filter window (ms default 1500ms): "))
+            break
+        except ValueError:
+            print("Please enter a valid integer.")
 
     # Ensure both UTC columns are datetime and timezone-naive
     Data["UTC"] = pd.to_datetime(Data["UTC"]).dt.tz_localize(None)
