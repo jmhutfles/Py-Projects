@@ -203,3 +203,103 @@ def align_sensor_to_gps_end(accel_data, gps_data):
     # Shift all sensor UTCs
     accel_data["UTC"] = accel_data["UTC"] + offset
     return accel_data
+
+
+import tkinter as tk
+import tkinter.simpledialog
+import ReadRawData
+
+def format_and_smooth_FS_data():
+    #Get Data
+    root = tk.Tk()
+    root.withdraw()
+    Data = ReadRawData.FlySightSensorRead("Select the Sensor FLysight file.")
+    Data = convert_sensor_time_to_utc(Data)
+    GPSData = ReadRawData.LoadFlysightData("Select the GPS Flysight file.")
+    accel_window_ms = tkinter.simpledialog.askinteger("Input", "Enter acceleration filter window (ms):", minvalue=1)
+    pressure_window_ms = tkinter.simpledialog.askinteger("Input", "Enter pressure altitiude filter window (ms):", minvalue=1)
+
+    # Ensure both UTC columns are datetime and timezone-naive
+    Data["UTC"] = pd.to_datetime(Data["UTC"]).dt.tz_localize(None)
+    GPSData["UTC"] = pd.to_datetime(GPSData["UTC"]).dt.tz_localize(None)
+
+    # Align sensor data so its end matches GPS data end
+    Data = align_sensor_to_gps_end(Data, GPSData)
+
+    # Sort by UTC before merging
+    Data = Data.sort_values("UTC")
+    GPSData = GPSData.sort_values("UTC")
+
+    # Merge GPS data onto sensor data (keeps all sensor data rows)
+    combined = pd.merge_asof(
+        Data,
+        GPSData,
+        on="UTC",
+        direction="nearest",
+        suffixes=('', '_gps')
+    )
+
+    # Calculate elapsed time since start (based on UTC)
+    start_utc = combined["UTC"].min()
+    combined["Elapsed (s)"] = (combined["UTC"] - start_utc).dt.total_seconds()
+
+    # Drop all other time-related columns except 'Elapsed (s)'
+    time_cols = [col for col in combined.columns if col.lower().startswith("time") or col in ["tow (s)", "week", "utc", "UTC"]]
+    time_cols = [col for col in time_cols if col != "Elapsed (s)"]  # keep only Elapsed (s)
+    combined = combined.drop(columns=time_cols)
+
+    # Move 'Elapsed (s)' to the first column
+    cols = combined.columns.tolist()
+    if "Elapsed (s)" in cols:
+        cols.insert(0, cols.pop(cols.index("Elapsed (s)")))
+        combined = combined[cols]
+
+
+    # Ensure all sensor columns are numeric for interpolation
+    sensor_cols = ["Ax (g)", "Ay (g)", "Az (g)", "Pressure (Pa)", "Temperature (deg C)", "Relative Humidity (%)", "X Mag (gauss)", "Y Mag (gauss)", "Z Mag (gauss)", "voltage (V)"]
+    for col in sensor_cols:
+        if col in combined.columns:
+            combined[col] = pd.to_numeric(combined[col], errors="coerce")
+
+    # Infer dtypes for all columns except 'Elapsed (s)'
+    combined.iloc[:, 1:] = combined.iloc[:, 1:].infer_objects(copy=False)
+
+    # Interpolate all columns except 'Elapsed (s)'
+    combined.iloc[:, 1:] = combined.iloc[:, 1:].interpolate(method='linear', limit_direction='both')
+
+    # Fill any remaining NaNs at the start/end
+    combined = combined.bfill().ffill()
+
+    # Now 'combined' has only 'Elapsed (s)' as the time column
+
+    # 1. Average all duplicate rows for each 'Elapsed (s)'
+    combined = combined.groupby("Elapsed (s)", as_index=False).mean(numeric_only=True)
+
+    # 2. Set 'Elapsed (s)' as the index for resampling
+    combined = combined.set_index("Elapsed (s)")
+
+    # 3. Create a new index at 100 Hz (every 0.01 seconds)
+    elapsed_min = combined.index.min()
+    elapsed_max = combined.index.max()
+    new_index = np.arange(elapsed_min, elapsed_max, 0.01)
+
+    # 4. Reindex and interpolate to fill in missing values at 100 Hz
+    combined = combined.reindex(new_index)
+    combined = combined.infer_objects(copy=False)  # <-- Add this line
+    combined = combined.interpolate(method='linear', limit_direction='both')
+
+    # 5. Reset index and rename it back to 'Elapsed (s)'
+    combined = combined.reset_index().rename(columns={'index': 'Elapsed (s)'})
+
+    # Convert ms to samples (100 Hz = 10 ms per sample)
+    accel_window_samples = max(1, int(accel_window_ms / 10))
+    pressure_window_samples = max(1, int(pressure_window_ms / 10))
+
+    # Apply rolling mean filter
+    for col in ["Ax (g)", "Ay (g)", "Az (g)"]:
+        if col in combined.columns:
+            combined[col + " (filtered)"] = combined[col].rolling(window=accel_window_samples, center=True, min_periods=1).mean()
+
+    if "Pressure (Pa)" in combined.columns:
+        combined["Pressure (Pa) (filtered)"] = combined["Pressure (Pa)"].rolling(window=pressure_window_samples, center=True, min_periods=1).mean()
+    return combined
