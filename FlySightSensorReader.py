@@ -20,17 +20,6 @@ Data = ReadRawData.FlySightSensorRead("Select the Sensor FLysight file.")
 Data = Conversions.convert_sensor_time_to_utc(Data)
 GPSData = ReadRawData.LoadFlysightData("Select the GPS Flysight file.")
 
-output_file = filedialog.asksaveasfilename(
-    title="Save the processed data as CSV",
-    defaultextension=".csv",
-    filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
-)
-
-if output_file:
-    Data.to_csv(output_file, index=False)
-    print(f"Data exported successfully to {output_file}")
-else:
-    print("Export canceled.")
 
 #CLeaning up the data
 for col in ["Ax (g)", "Ay (g)", "Az (g)"]:
@@ -40,6 +29,9 @@ accel_data = Data.dropna(subset=["UTC", "Ax (g)", "Ay (g)", "Az (g)"])
 # Ensure both UTC columns are datetime and timezone-naive
 accel_data.loc[:, "UTC"] = pd.to_datetime(accel_data["UTC"]).dt.tz_localize(None)
 GPSData["UTC"] = pd.to_datetime(GPSData["UTC"]).dt.tz_localize(None)
+
+# Align sensor data so its end matches GPS data end
+accel_data = Conversions.align_sensor_to_gps_end(accel_data, GPSData)
 
 # Find the earliest UTC across both datasets
 min_utc = min(accel_data["UTC"].min(), GPSData["UTC"].min())
