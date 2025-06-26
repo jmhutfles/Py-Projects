@@ -32,6 +32,9 @@ def RunTool(Tool, location, root=None):
     elif Tool == "WindCompensation.py":
         from WindCompensation import WindCompensation
         hide_and_run(WindCompensation)
+    elif Tool == "FlysightDisplay.py":
+        from FlysightDisplay import run_FlysightDisplay
+        hide_and_run(run_FlysightDisplay)
     else:
         # fallback for development
         import sys
