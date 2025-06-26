@@ -188,3 +188,18 @@ def format_and_smooth_imu_data(Data):
     DataUnits = DataUnits.reset_index(drop=True)
 
     return DataUnits
+
+def align_sensor_to_gps_end(accel_data, gps_data):
+    """
+    Shifts the sensor UTC times so that the end of the sensor data matches the end of the GPS data.
+    Returns a copy of accel_data with shifted UTC.
+    """
+    accel_data = accel_data.copy()
+    # Find the last UTC in each dataset
+    sensor_end_utc = accel_data["UTC"].max()
+    gps_end_utc = gps_data["UTC"].max()
+    # Compute the offset needed to align ends
+    offset = gps_end_utc - sensor_end_utc
+    # Shift all sensor UTCs
+    accel_data["UTC"] = accel_data["UTC"] + offset
+    return accel_data
