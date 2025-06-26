@@ -38,6 +38,7 @@ button_specs = [
     ("IMU Video Overlay", "IMUVideo.py"),
     ("ABT Quick View", "ABT_Quick_View.py"),
     ("IMU Quick View", "IMUQuickView.py"),
+    ("Flysight IMU Quick View", "FlysightDisplay.py"),
 ]
 
 for text, script in button_specs:
