@@ -10,22 +10,22 @@ import mplcursors
 def run_FlysightDisplay():
 
     #Pull in data
-    combined = Conversions.format_and_smooth_FS_data()
+    combined, Data, GPSData = Conversions.format_and_smooth_FS_data()
 
     # Convert GPS altitude and pressure to feet if needed
     if "Altitude MSL" in combined.columns:
         combined["GPS Altitude (ft)"] = combined["Altitude MSL"] * 3.28084  # meters to feet
-    if "Pressure (Pa)" in combined.columns:
+    if "Pressure (Pa) (filtered)" in combined.columns:
         # Convert pressure to altitude (meters), then to feet
         # Standard atmosphere formula (simplified, assumes sea level, 101325 Pa)
-        combined["Pressure Altitude (m)"] = 44330 * (1 - (combined["Pressure (Pa)"] / 101325) ** (1/5.255))
+        combined["Pressure Altitude (m)"] = 44330 * (1 - (combined["Pressure (Pa) (filtered)"] / 101325) ** (1/5.255))
         combined["Pressure Altitude (ft)"] = combined["Pressure Altitude (m)"] * 3.28084
 
     # Calculate acceleration magnitude (g)
-    accel_cols = ["Ax (g)", "Ay (g)", "Az (g)"]
+    accel_cols = ["Ax (g) (filtered)", "Ay (g) (filtered)", "Az (g) (filtered)"]
     if all(col in combined.columns for col in accel_cols):
         combined["Accel Mag (g)"] = np.sqrt(
-            combined["Ax (g)"]**2 + combined["Ay (g)"]**2 + combined["Az (g)"]**2
+            combined["Ax (g) (filtered)"]**2 + combined["Ay (g) (filtered)"]**2 + combined["Az (g) (filtered)"]**2
         )
 
     if "Down Velocity" in combined.columns:

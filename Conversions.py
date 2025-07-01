@@ -278,6 +278,7 @@ def format_and_smooth_FS_data():
     # Infer dtypes for all columns except 'Elapsed (s)'
     combined.iloc[:, 1:] = combined.iloc[:, 1:].infer_objects(copy=False)
 
+
     # Interpolate all columns except 'Elapsed (s)'
     combined.iloc[:, 1:] = combined.iloc[:, 1:].interpolate(method='linear', limit_direction='both')
 
@@ -298,12 +299,19 @@ def format_and_smooth_FS_data():
     new_index = np.arange(elapsed_min, elapsed_max, 0.01)
 
     # 4. Reindex and interpolate to fill in missing values at 100 Hz
-    combined = combined.reindex(new_index)
-    combined = combined.infer_objects(copy=False)  # <-- Add this line
-    combined = combined.interpolate(method='linear', limit_direction='both')
+    combined_interp = pd.DataFrame({'Elapsed (s)': new_index})
 
-    # 5. Reset index and rename it back to 'Elapsed (s)'
-    combined = combined.reset_index().rename(columns={'index': 'Elapsed (s)'})
+    for col in combined.columns:
+        # Only interpolate numeric columns, skip the index itself
+        if col != 'Elapsed (s)' and np.issubdtype(combined[col].dtype, np.number):
+            combined_interp[col] = np.interp(new_index, combined.index, combined[col])
+        elif col != 'Elapsed (s)':
+            # For non-numeric columns, just forward-fill the nearest value
+            combined_interp[col] = pd.Series(combined[col].values, index=combined.index).reindex(new_index, method='nearest')
+
+    combined_interp = combined_interp.set_index('Elapsed (s)')
+
+    combined = combined_interp.reset_index()
 
     # Convert ms to samples (100 Hz = 10 ms per sample)
     accel_window_samples = max(1, int(accel_window_ms / 10))
@@ -316,4 +324,4 @@ def format_and_smooth_FS_data():
 
     if "Pressure (Pa)" in combined.columns:
         combined["Pressure (Pa) (filtered)"] = combined["Pressure (Pa)"].rolling(window=pressure_window_samples, center=True, min_periods=1).mean()
-    return combined
+    return combined, Data, GPSData
