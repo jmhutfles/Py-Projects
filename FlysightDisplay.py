@@ -10,7 +10,9 @@ import mplcursors
 def run_FlysightDisplay():
 
     #Pull in data
-    combined, Data, GPSData = Conversions.format_and_smooth_FS_data()
+    combined, Data, GPSData, rawcombined = Conversions.format_and_smooth_FS_data()
+
+    KulCombined = Conversions.kalman_fuse_altitude_rawcombined(combined)
 
     # Convert GPS altitude and pressure to feet if needed
     if "Altitude MSL" in combined.columns:
@@ -54,6 +56,14 @@ def run_FlysightDisplay():
         l3, = ax2.plot(combined["Elapsed (s)"], combined["Pressure Altitude (ft)"], color='tab:green', label="Pressure Altitude (ft)")
         lines.append(l3)
         labels.append("Pressure Altitude (ft)")
+
+    # --- Add Kalman Fused Altitude (in feet) to the same plot ---
+    if "Elapsed (s)" in KulCombined.columns and "KF Altitude (m)" in KulCombined.columns:
+        KulCombined["KF Altitude (ft)"] = KulCombined["KF Altitude (m)"] * 3.28084
+        l_kf, = ax2.plot(KulCombined["Elapsed (s)"], KulCombined["KF Altitude (ft)"], color='tab:purple', label="KF Altitude (ft)", linewidth=2)
+        lines.append(l_kf)
+        labels.append("KF Altitude (ft)")
+
     ax2.set_ylabel("Altitude (ft)", color='tab:orange')
     ax2.tick_params(axis='y', labelcolor='tab:orange')
 
@@ -66,6 +76,13 @@ def run_FlysightDisplay():
         ax3.tick_params(axis='y', labelcolor='tab:red')
         lines.append(l4)
         labels.append("GPS Vertical Speed (ft/s)")
+
+    # Add Kalman (Kulman) vertical speed (in ft/s) to the vertical speed axis
+    if "Elapsed (s)" in KulCombined.columns and "KF Vertical Speed (m/s)" in KulCombined.columns:
+        KulCombined["KF Vertical Speed (ft/s)"] = KulCombined["KF Vertical Speed (m/s)"] * -3.28084
+        l_kf_vs, = ax3.plot(KulCombined["Elapsed (s)"], KulCombined["KF Vertical Speed (ft/s)"], color='tab:brown', label="KF Vertical Speed (ft/s)", linewidth=2)
+        lines.append(l_kf_vs)
+        labels.append("KF Vertical Speed (ft/s)")
 
     # Add horizontal line at 25 ft/s vertical speed
     ax3.axhline(25, color='purple', linestyle='--', linewidth=1, label='25 ft/s Vertical Speed')
@@ -93,17 +110,25 @@ def run_FlysightDisplay():
             "GPS Altitude (ft)",
             "Pressure Altitude (ft)",
             "Accel Mag (g)",
-            "Down Velocity (ft/s)"
+            "Down Velocity (ft/s)",
+            "KF Vertical Speed (ft/s)",
+            "KF Altitude (ft)"
         ]
         stats = []
         for col in show_cols:
             if col in combined.columns:
                 val = combined.loc[idx, col]
                 stats.append(f"{col}: {val:.3f}" if isinstance(val, (float, int, np.floating, np.integer)) else f"{col}: {val}")
+            elif col in KulCombined.columns:
+                # Find the closest row in KulCombined for the same elapsed time
+                idx_kul = (np.abs(KulCombined["Elapsed (s)"] - x)).idxmin()
+                val = KulCombined.loc[idx_kul, col]
+                stats.append(f"{col}: {val:.3f}" if isinstance(val, (float, int, np.floating, np.integer)) else f"{col}: {val}")
         sel.annotation.set_text("\n".join(stats))
         sel.annotation.get_bbox_patch().set(fc="white", alpha=0.9)
 
     plt.show()
+
 
 if __name__ == "__main__":
     run_FlysightDisplay()
