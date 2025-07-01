@@ -317,6 +317,9 @@ def format_and_smooth_FS_data():
     accel_window_samples = max(1, int(accel_window_ms / 10))
     pressure_window_samples = max(1, int(pressure_window_ms / 10))
 
+    #Save a dataframe before time filtering
+    rawcombined = combined.copy()
+
     # Apply rolling mean filter
     for col in ["Ax (g)", "Ay (g)", "Az (g)"]:
         if col in combined.columns:
@@ -324,4 +327,93 @@ def format_and_smooth_FS_data():
 
     if "Pressure (Pa)" in combined.columns:
         combined["Pressure (Pa) (filtered)"] = combined["Pressure (Pa)"].rolling(window=pressure_window_samples, center=True, min_periods=1).mean()
-    return combined, Data, GPSData
+    return combined, Data, GPSData, rawcombined
+
+
+
+import numpy as np
+
+def kalman_fuse_altitude_rawcombined(
+    rawcombined,
+    gps_col="Altitude MSL",
+    baro_col="Pressure (Pa) (filtered)",
+    ax_col="Ax (g) (filtered)",
+    ay_col="Ay (g) (filtered)",
+    az_col="Az (g) (filtered)",
+    dt=0.01,
+    R_gps=24,
+    R_baro=25,
+    Q=[[0.1, 0.05], [0.05, 0.1]],
+    g=9.80665
+):
+    """
+    Fuses GPS, barometric, and acceleration magnitude (unknown orientation) to estimate altitude and vertical speed.
+    Aligns barometric altitude to GPS at the end of the data to remove weather offset.
+    Adds 'KF Altitude (m)' and 'KF Vertical Speed (m/s)' columns to the DataFrame.
+    Assumes uniform time steps (dt).
+    """
+    df = rawcombined.copy()
+    # Convert pressure to altitude if needed
+    df[baro_col] = 44330 * (1 - (df[baro_col] / 101325) ** (1/5.255))
+    N = len(df)
+    alt_gps = df[gps_col].values if gps_col in df.columns else np.full(N, np.nan)
+    alt_baro = df[baro_col].values if baro_col in df.columns else np.full(N, np.nan)
+
+    # --- Align baro to GPS at the end ---
+    # Find last valid values
+    idx_last = (~np.isnan(alt_gps) & ~np.isnan(alt_baro)).nonzero()[0]
+    if len(idx_last) > 0:
+        idx_last = idx_last[-1]
+        offset = alt_gps[idx_last] - alt_baro[idx_last]
+        alt_baro = alt_baro + offset  # Shift baro to match GPS at the end
+
+    # Estimate vertical acceleration from magnitude (unknown orientation)
+    if all(col in df.columns for col in [ax_col, ay_col, az_col]):
+        acc_mag = np.sqrt(df[ax_col]**2 + df[ay_col]**2 + df[az_col]**2)
+        acc_z = (acc_mag - 1.0) * g  # Estimate vertical acceleration in m/s^2
+    else:
+        acc_z = np.zeros(N)
+
+    # Kalman filter setup
+    first_alt = alt_gps[0] if not np.isnan(alt_gps[0]) else alt_baro[0]
+    x = np.array([[first_alt], [0]])
+    P = np.eye(2) * 10
+    F = np.array([[1, dt], [0, 1]])
+    B = np.array([[0.5 * dt**2], [dt]])  # For acceleration input
+    H_gps = np.array([[1, 0]])
+    H_baro = np.array([[1, 0]])
+    Q = np.array(Q)
+
+    kf_alt = []
+    kf_vspeed = []
+
+    for i in range(N):
+        # Predict (with acceleration as control input)
+        u = acc_z[i]
+        x = F @ x + B * u
+        P = F @ P @ F.T + Q
+
+        # Update with baro
+        if not np.isnan(alt_baro[i]):
+            z_baro = alt_baro[i]
+            y = z_baro - (H_baro @ x)[0]
+            S = H_baro @ P @ H_baro.T + R_baro
+            K = P @ H_baro.T / S
+            x = x + K * y
+            P = (np.eye(2) - K @ H_baro) @ P
+
+        # Update with GPS
+        if not np.isnan(alt_gps[i]):
+            z_gps = alt_gps[i]
+            y = z_gps - (H_gps @ x)[0]
+            S = H_gps @ P @ H_gps.T + R_gps
+            K = P @ H_gps.T / S
+            x = x + K * y
+            P = (np.eye(2) - K @ H_gps) @ P
+
+        kf_alt.append(x[0, 0])
+        kf_vspeed.append(x[1, 0])
+
+    df["KF Altitude (m)"] = kf_alt
+    df["KF Vertical Speed (m/s)"] = kf_vspeed
+    return df
