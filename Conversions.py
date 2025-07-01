@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
+from ahrs.filters import Madgwick
 
 #Feet to meters
 def FeetToMeters (feet):
@@ -270,7 +271,7 @@ def format_and_smooth_FS_data():
 
 
     # Ensure all sensor columns are numeric for interpolation
-    sensor_cols = ["Ax (g)", "Ay (g)", "Az (g)", "Pressure (Pa)", "Temperature (deg C)", "Relative Humidity (%)", "X Mag (gauss)", "Y Mag (gauss)", "Z Mag (gauss)", "voltage (V)"]
+    sensor_cols = ["Ax (g)", "Ay (g)", "Az (g)", "Pressure (Pa)", "Temperature (deg C)", "Relative Humidity (%)", "X Mag (gauss)", "Y Mag (gauss)", "Z Mag (gauss)", "voltage (V)", "Wx (deg/s)", "Wy (deg/s)", "Wz (deg/s)"]
     for col in sensor_cols:
         if col in combined.columns:
             combined[col] = pd.to_numeric(combined[col], errors="coerce")
@@ -325,21 +326,71 @@ def format_and_smooth_FS_data():
         if col in combined.columns:
             combined[col + " (filtered)"] = combined[col].rolling(window=accel_window_samples, center=True, min_periods=1).mean()
 
+    # Apply rolling mean filter to gyro columns as well
+    for col in ["Wx (deg/s)", "Wy (deg/s)", "Wz (deg/s)"]:
+        if col in combined.columns:
+            combined[col + " (filtered)"] = combined[col].rolling(window=accel_window_samples, center=True, min_periods=1).mean()
+
     if "Pressure (Pa)" in combined.columns:
         combined["Pressure (Pa) (filtered)"] = combined["Pressure (Pa)"].rolling(window=pressure_window_samples, center=True, min_periods=1).mean()
     return combined, Data, GPSData, rawcombined
 
 
 
+from ahrs.filters import Madgwick
+from scipy.spatial.transform import Rotation as R
 import numpy as np
 
-def kalman_fuse_altitude_rawcombined(
-    rawcombined,
+def compute_vertical_acceleration(
+    df,
+    ax_col="Ax (g) (filtered)",
+    ay_col="Ay (g) (filtered)",
+    az_col="Az (g) (filtered)",
+    gx_col="Wx (deg/s) (filtered)",
+    gy_col="Wy (deg/s) (filtered)",
+    gz_col="Wz (deg/s) (filtered)",
+    mx_col="X Mag (gauss)",
+    my_col="Y Mag (gauss)",
+    mz_col="Z Mag (gauss)",
+    g=9.80665,
+    dt=0.01
+):
+    # Prepare sensor arrays
+    acc = df[[ax_col, ay_col, az_col]].values
+    gyr = df[[gx_col, gy_col, gz_col]].values * np.pi / 180  # deg/s to rad/s
+    mag = df[[mx_col, my_col, mz_col]].values
+
+    # Run Madgwick filter to get orientation quaternions
+    madgwick = Madgwick(sampleperiod=dt)
+    Q = np.zeros((len(df), 4))
+    Q[0] = [1, 0, 0, 0]  # initial quaternion [w, x, y, z]
+    for i in range(1, len(df)):
+        Q[i] = madgwick.updateMARG(Q[i-1], gyr[i], acc[i], mag[i])
+
+    # Rotate acceleration to earth frame
+    acc_earth = np.zeros_like(acc)
+    for i in range(len(df)):
+        quat = np.roll(Q[i], -1)
+        r = R.from_quat(quat)
+        acc_earth[i] = r.apply(acc[i])
+
+    vertical_acc = acc_earth[:, 2] * g - g  # adjust sign if needed
+
+    return vertical_acc
+
+def kalman_fuse_altitude_combined_with_orientation(
+    combined,
     gps_col="Altitude MSL",
     baro_col="Pressure (Pa) (filtered)",
     ax_col="Ax (g) (filtered)",
     ay_col="Ay (g) (filtered)",
     az_col="Az (g) (filtered)",
+    gx_col="Gx (deg/s) (filtered)",
+    gy_col="Gy (deg/s) (filtered)",
+    gz_col="Gz (deg/s) (filtered)",
+    mx_col="X Mag (gauss)",
+    my_col="Y Mag (gauss)",
+    mz_col="Z Mag (gauss)",
     dt=0.01,
     R_gps=24,
     R_baro=25,
@@ -347,12 +398,9 @@ def kalman_fuse_altitude_rawcombined(
     g=9.80665
 ):
     """
-    Fuses GPS, barometric, and acceleration magnitude (unknown orientation) to estimate altitude and vertical speed.
-    Aligns barometric altitude to GPS at the end of the data to remove weather offset.
-    Adds 'KF Altitude (m)' and 'KF Vertical Speed (m/s)' columns to the DataFrame.
-    Assumes uniform time steps (dt).
+    Fuses GPS, barometric, and orientation-corrected vertical acceleration to estimate altitude and vertical speed.
     """
-    df = rawcombined.copy()
+    df = combined.copy()
     # Convert pressure to altitude if needed
     df[baro_col] = 44330 * (1 - (df[baro_col] / 101325) ** (1/5.255))
     N = len(df)
@@ -360,26 +408,21 @@ def kalman_fuse_altitude_rawcombined(
     alt_baro = df[baro_col].values if baro_col in df.columns else np.full(N, np.nan)
 
     # --- Align baro to GPS at the end ---
-    # Find last valid values
     idx_last = (~np.isnan(alt_gps) & ~np.isnan(alt_baro)).nonzero()[0]
     if len(idx_last) > 0:
         idx_last = idx_last[-1]
         offset = alt_gps[idx_last] - alt_baro[idx_last]
-        alt_baro = alt_baro + offset  # Shift baro to match GPS at the end
+        alt_baro = alt_baro + offset
 
-    # Estimate vertical acceleration from magnitude (unknown orientation)
-    if all(col in df.columns for col in [ax_col, ay_col, az_col]):
-        acc_mag = np.sqrt(df[ax_col]**2 + df[ay_col]**2 + df[az_col]**2)
-        acc_z = (acc_mag - 1.0) * g  # Estimate vertical acceleration in m/s^2
-    else:
-        acc_z = np.zeros(N)
+    # Compute orientation-corrected vertical acceleration
+    vertical_acc = compute_vertical_acceleration(df)
 
     # Kalman filter setup
     first_alt = alt_gps[0] if not np.isnan(alt_gps[0]) else alt_baro[0]
     x = np.array([[first_alt], [0]])
     P = np.eye(2) * 10
     F = np.array([[1, dt], [0, 1]])
-    B = np.array([[0.5 * dt**2], [dt]])  # For acceleration input
+    B = np.array([[0.5 * dt**2], [dt]])
     H_gps = np.array([[1, 0]])
     H_baro = np.array([[1, 0]])
     Q = np.array(Q)
@@ -388,8 +431,8 @@ def kalman_fuse_altitude_rawcombined(
     kf_vspeed = []
 
     for i in range(N):
-        # Predict (with acceleration as control input)
-        u = acc_z[i]
+        # Predict (with orientation-corrected vertical acceleration)
+        u = vertical_acc[i]
         x = F @ x + B * u
         P = F @ P @ F.T + Q
 

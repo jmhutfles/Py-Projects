@@ -12,7 +12,8 @@ def run_FlysightDisplay():
     #Pull in data
     combined, Data, GPSData, rawcombined = Conversions.format_and_smooth_FS_data()
 
-    KulCombined = Conversions.kalman_fuse_altitude_rawcombined(combined)
+    KulCombined = Conversions.kalman_fuse_altitude_combined_with_orientation(
+    combined)
 
     # Convert GPS altitude and pressure to feet if needed
     if "Altitude MSL" in combined.columns:
