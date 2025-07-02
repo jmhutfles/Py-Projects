@@ -12,17 +12,15 @@ def run_FlysightDisplay():
     #Pull in data
     combined, Data, GPSData, rawcombined = Conversions.format_and_smooth_FS_data()
 
-    KulCombined = Conversions.kalman_fuse_altitude_combined_with_orientation(
-    combined)
+    combined = Conversions.align_baro_to_gps(combined)
+
+    KulCombined = Conversions.kalman_fuse_gps_baro(combined)
 
     # Convert GPS altitude and pressure to feet if needed
-    if "Altitude MSL" in combined.columns:
-        combined["GPS Altitude (ft)"] = combined["Altitude MSL"] * 3.28084  # meters to feet
-    if "Pressure (Pa) (filtered)" in combined.columns:
-        # Convert pressure to altitude (meters), then to feet
-        # Standard atmosphere formula (simplified, assumes sea level, 101325 Pa)
-        combined["Pressure Altitude (m)"] = 44330 * (1 - (combined["Pressure (Pa) (filtered)"] / 101325) ** (1/5.255))
-        combined["Pressure Altitude (ft)"] = combined["Pressure Altitude (m)"] * 3.28084
+
+    combined["GPS Altitude (ft)"] = combined["Altitude MSL"] * 3.28084  # meters to feet
+    
+    combined["Baro Altitude (ft)"] = combined["Baro Altitude (m)"] * 3.28084
 
     # Calculate acceleration magnitude (g)
     accel_cols = ["Ax (g) (filtered)", "Ay (g) (filtered)", "Az (g) (filtered)"]
@@ -53,10 +51,10 @@ def run_FlysightDisplay():
         l2, = ax2.plot(combined["Elapsed (s)"], combined["GPS Altitude (ft)"], color='tab:orange', label="GPS Altitude (ft)")
         lines.append(l2)
         labels.append("GPS Altitude (ft)")
-    if "Pressure Altitude (ft)" in combined.columns:
-        l3, = ax2.plot(combined["Elapsed (s)"], combined["Pressure Altitude (ft)"], color='tab:green', label="Pressure Altitude (ft)")
+    if "Baro Altitude (ft)" in combined.columns:
+        l3, = ax2.plot(combined["Elapsed (s)"], combined["Baro Altitude (ft)"], color='tab:green', label="Baro Altitude (ft)")
         lines.append(l3)
-        labels.append("Pressure Altitude (ft)")
+        labels.append("Baro Altitude (ft)")
 
     # --- Add Kalman Fused Altitude (in feet) to the same plot ---
     if "Elapsed (s)" in KulCombined.columns and "KF Altitude (m)" in KulCombined.columns:
