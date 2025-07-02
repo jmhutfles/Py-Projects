@@ -235,6 +235,13 @@ def format_and_smooth_FS_data():
         except ValueError:
             print("Please enter a valid integer.")
 
+    while True:
+        try:
+            GPSAltitudeSamples_ms = int(input("Enter GPS altitude filter window (ms default 1500ms): "))
+            break
+        except ValueError:
+            print("Please enter a valid integer.")
+
     # Ensure both UTC columns are datetime and timezone-naive
     Data["UTC"] = pd.to_datetime(Data["UTC"]).dt.tz_localize(None)
     GPSData["UTC"] = pd.to_datetime(GPSData["UTC"]).dt.tz_localize(None)
@@ -318,6 +325,7 @@ def format_and_smooth_FS_data():
     # Convert ms to samples (100 Hz = 10 ms per sample)
     accel_window_samples = max(1, int(accel_window_ms / 10))
     pressure_window_samples = max(1, int(pressure_window_ms / 10))
+    GPSAltitudeSamples = max(1, int(GPSAltitudeSamples_ms / 10))
 
     #Save a dataframe before time filtering
     rawcombined = combined.copy()
@@ -335,7 +343,18 @@ def format_and_smooth_FS_data():
     if "Pressure (Pa)" in combined.columns:
         combined["Pressure (Pa) (filtered)"] = combined["Pressure (Pa)"].rolling(window=pressure_window_samples, center=True, min_periods=1).mean()
 
+    #Apply rolling mean filter to gps altitude
+    if "Altitude MSL" in combined.columns:
+        combined["Altitude MSL (m) (filtered)"] = combined["Altitude MSL"].rolling(window=GPSAltitudeSamples, center=True, min_periods=1).mean()
+
     combined["Baro Altitude (m)"] = 44330 * (1 - (combined["Pressure (Pa) (filtered)"] / 101325) ** (1 / 5.255))
+
+    #Create Accleration Magnitude Colloum
+    combined["Amag (g)"] = np.sqrt(
+        combined["Ax (g) (filtered)"]**2 +
+        combined["Ay (g) (filtered)"]**2 +
+        combined["Az (g) (filtered)"]**2
+    )
 
     return combined, Data, GPSData, rawcombined
 
@@ -346,12 +365,12 @@ import pandas as pd
 
 def kalman_fuse_gps_baro(
     df,
-    gps_col="Altitude MSL",
+    gps_col="Altitude MSL (m) (filtered)",
     baro_col="Baro Altitude (m)",
     dt=0.01,
     R_gps=4,      # GPS measurement noise (variance, meters^2)
-    R_baro=4,     # Baro measurement noise (variance, meters^2)
-    Q=[[0.1, 0.0], [0.0, 0.1]]  # Process noise
+    R_baro=10,     # Baro measurement noise (variance, meters^2)
+    Q=[[0.5, 0.0], [0.0, 0.5]]  # Process noise
 ):
     """
     Simple 1D Kalman filter fusing GPS and barometric altitude.
@@ -408,7 +427,7 @@ import pandas as pd
 
 def align_baro_to_gps(
     df,
-    gps_col="Altitude MSL",
+    gps_col="Altitude MSL (m) (filtered)",
     pressure_col="Baro Altitude (m)",
     elapsed_col="Elapsed (s)",
     align_seconds=3

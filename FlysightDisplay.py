@@ -8,126 +8,96 @@ import Conversions
 import mplcursors
 
 def run_FlysightDisplay():
-
-    #Pull in data
+    # Pull in data
     combined, Data, GPSData, rawcombined = Conversions.format_and_smooth_FS_data()
-
     combined = Conversions.align_baro_to_gps(combined)
-
     KulCombined = Conversions.kalman_fuse_gps_baro(combined)
 
-    # Convert GPS altitude and pressure to feet if needed
+    # Convert Kalman outputs to feet
+    KulCombined["KF Altitude (ft)"] = KulCombined["KF Altitude (m)"] * 3.28084
+    KulCombined["KF Vertical Speed (ft/s)"] = KulCombined["KF Vertical Speed (m/s)"] * 3.28084
 
-    combined["GPS Altitude (ft)"] = combined["Altitude MSL"] * 3.28084  # meters to feet
-    
-    combined["Baro Altitude (ft)"] = combined["Baro Altitude (m)"] * 3.28084
+    # Always use GPS/baro altitude from combined, not KulCombined
+    KulCombined["GPS Altitude (ft)"] = combined["Altitude MSL (m) (filtered)"] * 3.28084
+    KulCombined["Baro Altitude (ft)"] = combined["Baro Altitude (m)"] * 3.28084
 
-    # Calculate acceleration magnitude (g)
-    accel_cols = ["Ax (g) (filtered)", "Ay (g) (filtered)", "Az (g) (filtered)"]
-    if all(col in combined.columns for col in accel_cols):
-        combined["Accel Mag (g)"] = np.sqrt(
-            combined["Ax (g) (filtered)"]**2 + combined["Ay (g) (filtered)"]**2 + combined["Az (g) (filtered)"]**2
-        )
+    # Prepare legend lists before plotting
+    lines = []
+    labels = []
 
-    if "Down Velocity" in combined.columns:
-        combined["Down Velocity (ft/s)"] = combined["Down Velocity"] * 3.28084
+    # Plot KF Altitude and KF Vertical Speed
+    fig, ax1 = plt.subplots()
+    ax1.set_xlabel("Elapsed Time (s)")
+    ax1.set_ylabel("KF Altitude (ft)", color="tab:blue")
+    l1, = ax1.plot(KulCombined["Elapsed (s)"], KulCombined["KF Altitude (ft)"], color="tab:blue", label="KF Altitude (ft)")
+    ax1.tick_params(axis='y', labelcolor="tab:blue")
+    lines.append(l1)
+    labels.append(l1.get_label())
 
-    # Plot
-    plt.figure(figsize=(12, 7))
-    ax1 = plt.gca()
-
-    # Acceleration magnitude
-    lines, labels = [], []
-    if "Accel Mag (g)" in combined.columns:
-        l1, = ax1.plot(combined["Elapsed (s)"], combined["Accel Mag (g)"], color='tab:blue', label="Acceleration Magnitude (g)")
-        ax1.set_ylabel("Acceleration Magnitude (g)", color='tab:blue')
-        ax1.tick_params(axis='y', labelcolor='tab:blue')
-        lines.append(l1)
-        labels.append("Acceleration Magnitude (g)")
-
-    # Altitude (GPS and Pressure)
     ax2 = ax1.twinx()
-    if "GPS Altitude (ft)" in combined.columns:
-        l2, = ax2.plot(combined["Elapsed (s)"], combined["GPS Altitude (ft)"], color='tab:orange', label="GPS Altitude (ft)")
-        lines.append(l2)
-        labels.append("GPS Altitude (ft)")
-    if "Baro Altitude (ft)" in combined.columns:
-        l3, = ax2.plot(combined["Elapsed (s)"], combined["Baro Altitude (ft)"], color='tab:green', label="Baro Altitude (ft)")
-        lines.append(l3)
-        labels.append("Baro Altitude (ft)")
+    ax2.set_ylabel("KF Vertical Speed (ft/s)", color="tab:red")
+    l2, = ax2.plot(KulCombined["Elapsed (s)"], -1 * KulCombined["KF Vertical Speed (ft/s)"], color="tab:red", label="KF Vertical Speed (ft/s)")
+    ax2.tick_params(axis='y', labelcolor="tab:red")
+    lines.append(l2)
+    labels.append(l2.get_label())
 
-    # --- Add Kalman Fused Altitude (in feet) to the same plot ---
-    if "Elapsed (s)" in KulCombined.columns and "KF Altitude (m)" in KulCombined.columns:
-        KulCombined["KF Altitude (ft)"] = KulCombined["KF Altitude (m)"] * 3.28084
-        l_kf, = ax2.plot(KulCombined["Elapsed (s)"], KulCombined["KF Altitude (ft)"], color='tab:purple', label="KF Altitude (ft)", linewidth=2)
-        lines.append(l_kf)
-        labels.append("KF Altitude (ft)")
+    # Add a third y-axis for acceleration magnitude
+    ax3 = ax1.twinx()
+    ax3.spines["right"].set_position(("axes", 1.15))
+    l3, = ax3.plot(combined["Elapsed (s)"], KulCombined["Amag (g)"], color="tab:green", label="Accel Magnitude (g)", alpha=0.7)
+    ax3.set_ylabel("Accel Magnitude (g)", color="tab:green")
+    ax3.tick_params(axis='y', labelcolor="tab:green")
+    lines.append(l3)
+    labels.append("Accel Magnitude (g)")
 
-    ax2.set_ylabel("Altitude (ft)", color='tab:orange')
-    ax2.tick_params(axis='y', labelcolor='tab:orange')
+    # Add a horizontal line at 25 ft/s on the vertical speed axis
+    ax2.axhline(25, color="tab:orange", linestyle="--", linewidth=1.5, label="25 ft/s")
+    lines.append(ax2.lines[-1])
+    labels.append("25 ft/s")
 
-    # Add a third axis for vertical speed (GPS) in ft/s
-    if "Down Velocity (ft/s)" in combined.columns:
-        ax3 = ax1.twinx()
-        ax3.spines["right"].set_position(("axes", 1.12))  # Offset the third axis
-        l4, = ax3.plot(combined["Elapsed (s)"], combined["Down Velocity (ft/s)"], color='tab:red', label="GPS Vertical Speed (ft/s)")
-        ax3.set_ylabel("GPS Vertical Speed (ft/s)", color='tab:red')
-        ax3.tick_params(axis='y', labelcolor='tab:red')
-        lines.append(l4)
-        labels.append("GPS Vertical Speed (ft/s)")
-
-    # Add Kalman (Kulman) vertical speed (in ft/s) to the vertical speed axis
-    if "Elapsed (s)" in KulCombined.columns and "KF Vertical Speed (m/s)" in KulCombined.columns:
-        KulCombined["KF Vertical Speed (ft/s)"] = KulCombined["KF Vertical Speed (m/s)"] * -3.28084
-        l_kf_vs, = ax3.plot(KulCombined["Elapsed (s)"], KulCombined["KF Vertical Speed (ft/s)"], color='tab:brown', label="KF Vertical Speed (ft/s)", linewidth=2)
-        lines.append(l_kf_vs)
-        labels.append("KF Vertical Speed (ft/s)")
-
-    # Add horizontal line at 25 ft/s vertical speed
-    ax3.axhline(25, color='purple', linestyle='--', linewidth=1, label='25 ft/s Vertical Speed')
-
-    # Update legend to include all lines
-    ax1.legend(lines, labels, loc='upper right')
-
-    plt.xlabel("Elapsed Time (s)")
-    plt.title("Acceleration Magnitude, GPS Altitude, Pressure Altitude, and Vertical Speed vs. Elapsed Time")
+    # Combine legends
+    ax1.legend(lines, labels, loc="upper right")
+    plt.title("Kalman Fused Altitude, Vertical Speed, and Accel Magnitude")
     plt.tight_layout()
 
-    # Enable interactive cursor for all lines (bubble appears on click)
-    all_lines = lines  # lines contains all plotted Line2D objects
-    cursor = mplcursors.cursor(all_lines, hover=False, multiple=True)
+    # --- Interactive annotation bubbles ---
+    import mplcursors
+
+    df = pd.DataFrame({
+        "Elapsed (s)": KulCombined["Elapsed (s)"],
+        "KF Altitude (ft)": KulCombined["KF Altitude (ft)"],
+        "KF Vertical Speed (ft/s)": KulCombined["KF Vertical Speed (ft/s)"],
+        "Accel Magnitude (g)": KulCombined["Amag (g)"]
+    })
+
+    cursor = mplcursors.cursor([l1, l2, l3], hover=False, multiple=True)
 
     @cursor.connect("add")
     def on_add(sel):
-        # Get the x-value (Elapsed (s)) from the selected point
-        x = sel.target[0]
-        # Find the closest row in the DataFrame
-        idx = (np.abs(combined["Elapsed (s)"] - x)).idxmin()
-        # Only show selected columns
-        show_cols = [
-            "Elapsed (s)",
-            "GPS Altitude (ft)",
-            "Pressure Altitude (ft)",
-            "Accel Mag (g)",
-            "Down Velocity (ft/s)",
-            "KF Vertical Speed (ft/s)",
-            "KF Altitude (ft)"
-        ]
-        stats = []
-        for col in show_cols:
-            if col in combined.columns:
-                val = combined.loc[idx, col]
-                stats.append(f"{col}: {val:.3f}" if isinstance(val, (float, int, np.floating, np.integer)) else f"{col}: {val}")
-            elif col in KulCombined.columns:
-                # Find the closest row in KulCombined for the same elapsed time
-                idx_kul = (np.abs(KulCombined["Elapsed (s)"] - x)).idxmin()
-                val = KulCombined.loc[idx_kul, col]
-                stats.append(f"{col}: {val:.3f}" if isinstance(val, (float, int, np.floating, np.integer)) else f"{col}: {val}")
-        sel.annotation.set_text("\n".join(stats))
-        sel.annotation.get_bbox_patch().set(fc="white", alpha=0.9)
+        t = sel.target[0]
+        i = (np.abs(df["Elapsed (s)"] - t)).argmin()
+        row = df.iloc[i]
+        sel.annotation.set(text=(
+            f"Time: {row['Elapsed (s)']:.2f} s\n"
+            f"KF Altitude: {row['KF Altitude (ft)']:.1f} ft\n"
+            f"KF VSpeed: {row['KF Vertical Speed (ft/s)']:.1f} ft/s\n"
+            f"Accel Mag: {row['Accel Magnitude (g)']:.2f} g"
+        ))
+        sel.annotation.draggable(True)
 
     plt.show()
 
+    # Plot all three on the same axis for comparison
+    fig, ax = plt.subplots()
+    ax.set_xlabel("Elapsed Time (s)")
+    ax.set_ylabel("Altitude (ft)")
+    l_kf, = ax.plot(KulCombined["Elapsed (s)"], KulCombined["KF Altitude (ft)"], label="KF Altitude (ft)", color="tab:blue")
+    l_gps, = ax.plot(combined["Elapsed (s)"], combined["Altitude MSL (m) (filtered)"] * 3.28084, label="GPS Altitude (ft)", color="tab:orange", alpha=0.6)
+    l_baro, = ax.plot(combined["Elapsed (s)"], combined["Baro Altitude (m)"] * 3.28084, label="Baro Altitude (ft)", color="tab:green", alpha=0.6)
+    ax.legend(loc="upper right")
+    plt.title("Kalman Filter vs. Raw GPS and Baro Altitude")
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     run_FlysightDisplay()
