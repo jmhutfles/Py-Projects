@@ -230,14 +230,14 @@ def format_and_smooth_FS_data():
 
     while True:
         try:
-            pressure_window_ms = int(input("Enter pressure altitude filter window (ms default 1500ms): "))
+            pressure_window_ms = int(input("Enter pressure altitude filter window (ms default 1000ms): "))
             break
         except ValueError:
             print("Please enter a valid integer.")
 
     while True:
         try:
-            GPSAltitudeSamples_ms = int(input("Enter GPS altitude filter window (ms default 1500ms): "))
+            GPSAltitudeSamples_ms = int(input("Enter GPS altitude filter window (ms default 1000ms): "))
             break
         except ValueError:
             print("Please enter a valid integer.")
