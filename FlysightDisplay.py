@@ -72,6 +72,9 @@ def run_FlysightDisplay():
 
     cursor = mplcursors.cursor([l1, l2, l3], hover=False, multiple=True)
 
+    # Store last two selected indices
+    selected_points = []
+
     @cursor.connect("add")
     def on_add(sel):
         t = sel.target[0]
@@ -84,6 +87,18 @@ def run_FlysightDisplay():
             f"Accel Mag: {row['Accel Magnitude (g)']:.2f} g"
         ))
         sel.annotation.draggable(True)
+
+        # Track selected points
+        selected_points.append(i)
+        if len(selected_points) > 2:
+            selected_points.pop(0)
+        if len(selected_points) == 2:
+            idx1, idx2 = selected_points
+            alt1 = df.iloc[idx1]["KF Altitude (ft)"]
+            alt2 = df.iloc[idx2]["KF Altitude (ft)"]
+            delta = alt2 - alt1
+            # Display as a popup annotation at the second point
+            sel.annotation.set_text(sel.annotation.get_text() + f"\nΔ Altitude: {delta:.1f} ft")
 
     plt.show()
 
