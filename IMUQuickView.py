@@ -14,11 +14,11 @@ def IMUQuickView():
 
     while True:
         # Get Data and filename using ReadRawData's dialog
-        Data, file_path = ReadRawData.ReadIMU("Select the IMU file.")
-        if Data is None or file_path is None:
+        Data, file_paths = ReadRawData.ReadIMU("Select one or more IMU file(s).")
+        if Data is None or file_paths is None:
             print("No file selected. Exiting.")
             break
-        file_name = os.path.basename(file_path)
+        file_name = os.path.basename(file_paths[0])
 
         # Use the format_and_smooth_imu_data function from Conversions
         DataUnits = Conversions.format_and_smooth_imu_data(Data)
