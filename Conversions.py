@@ -45,10 +45,23 @@ def format_and_smooth_abt_data(Data):
     """
     import Conversions
 
-    # User input for smoothing windows
-    smoothness_alt_ms = int(input("Enter smoothing window for altitude (ms, default 500): ") or 500)
-    smoothness_acc_ms = int(input("Enter smoothing window for acceleration (ms, default 100): ") or 100)
-    smoothness_rod_ms = int(input("Enter smoothing window for rate of descent (ms, default 1500): ") or 1500)
+    # Default values
+    default_alt_ms = 500
+    default_acc_ms = 100
+    default_rod_ms = 1500
+
+    use_defaults = input(
+        f"Use default smoothing windows? (altitude={default_alt_ms} ms, acceleration={default_acc_ms} ms, ROD={default_rod_ms} ms) [y/n]: "
+    ).strip().lower()
+
+    if use_defaults == "y":
+        smoothness_alt_ms = default_alt_ms
+        smoothness_acc_ms = default_acc_ms
+        smoothness_rod_ms = default_rod_ms
+    else:
+        smoothness_alt_ms = int(input("Enter smoothing window for altitude (ms, default 500): ") or default_alt_ms)
+        smoothness_acc_ms = int(input("Enter smoothing window for acceleration (ms, default 100): ") or default_acc_ms)
+        smoothness_rod_ms = int(input("Enter smoothing window for rate of descent (ms, default 1500): ") or default_rod_ms)
 
     # Clean and sort
     Data = Data.dropna(subset=["Time"])
@@ -122,10 +135,22 @@ def format_and_smooth_imu_data(Data):
     """
     import Conversions
 
-    # User input for smoothing windows
-    smoothness_alt_ms = int(input("Enter smoothing window for altitude (ms, default 500): ") or 500)
-    smoothness_acc_ms = int(input("Enter smoothing window for acceleration (ms, default 100): ") or 100)
-    smoothness_rod_ms = int(input("Enter smoothing window for rate of descent (ms, default 1500): ") or 1500)
+    default_alt_ms = 500
+    default_acc_ms = 100
+    default_rod_ms = 1500
+
+    use_defaults = input(
+        f"Use default smoothing windows? (altitude={default_alt_ms} ms, acceleration={default_acc_ms} ms, ROD={default_rod_ms} ms) [y/n]: "
+    ).strip().lower()
+
+    if use_defaults == "y":
+        smoothness_alt_ms = default_alt_ms
+        smoothness_acc_ms = default_acc_ms
+        smoothness_rod_ms = default_rod_ms
+    else:
+        smoothness_alt_ms = int(input("Enter smoothing window for altitude (ms, default 500): ") or default_alt_ms)
+        smoothness_acc_ms = int(input("Enter smoothing window for acceleration (ms, default 100): ") or default_acc_ms)
+        smoothness_rod_ms = int(input("Enter smoothing window for rate of descent (ms, default 1500): ") or default_rod_ms)
 
     # Clean and sort
     Data = Data.dropna(subset=["Time"])
@@ -221,26 +246,39 @@ def format_and_smooth_FS_data():
     
     # Ask user for filter window sizes in ms (command prompt)
 
-    while True:
-        try:
-            accel_window_ms = int(input("Enter acceleration filter window (ms, default 100ms): "))
-            break
-        except ValueError:
-            print("Please enter a valid integer.")
+    default_accel_window_ms = 100
+    default_pressure_window_ms = 1000
+    default_GPSAltitudeSamples_ms = 1000
 
-    while True:
-        try:
-            pressure_window_ms = int(input("Enter pressure altitude filter window (ms default 1000ms): "))
-            break
-        except ValueError:
-            print("Please enter a valid integer.")
+    use_defaults = input(
+        f"Use default filter windows? (accel={default_accel_window_ms} ms, pressure={default_pressure_window_ms} ms, GPS altitude={default_GPSAltitudeSamples_ms} ms) [y/n]: "
+    ).strip().lower()
 
-    while True:
-        try:
-            GPSAltitudeSamples_ms = int(input("Enter GPS altitude filter window (ms default 1000ms): "))
-            break
-        except ValueError:
-            print("Please enter a valid integer.")
+    if use_defaults == "y":
+        accel_window_ms = default_accel_window_ms
+        pressure_window_ms = default_pressure_window_ms
+        GPSAltitudeSamples_ms = default_GPSAltitudeSamples_ms
+    else:
+        while True:
+            try:
+                accel_window_ms = int(input("Enter acceleration filter window (ms, default 100ms): ") or default_accel_window_ms)
+                break
+            except ValueError:
+                print("Please enter a valid integer.")
+
+        while True:
+            try:
+                pressure_window_ms = int(input("Enter pressure altitude filter window (ms default 1000ms): ") or default_pressure_window_ms)
+                break
+            except ValueError:
+                print("Please enter a valid integer.")
+
+        while True:
+            try:
+                GPSAltitudeSamples_ms = int(input("Enter GPS altitude filter window (ms default 1000ms): ") or default_GPSAltitudeSamples_ms)
+                break
+            except ValueError:
+                print("Please enter a valid integer.")
 
     # Ensure both UTC columns are datetime and timezone-naive
     Data["UTC"] = pd.to_datetime(Data["UTC"]).dt.tz_localize(None)
