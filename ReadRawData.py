@@ -102,31 +102,66 @@ def FlySightSensorRead(prompt):
 
 def ReadABT(prompt):
     DataHeaders = ["Time", "Ax", "Ay", "Az", "P", "T"]
-    Path = filedialog.askopenfilename(title=prompt)
-    if not Path:
+    Paths = filedialog.askopenfilenames(title=prompt)
+    if not Paths:
         return None, None
 
-    try:
-        Data = pd.read_csv(Path, skiprows=11, header=None, names=DataHeaders)
-        Data = Data.apply(pd.to_numeric, errors='coerce')
-        
-        return Data, Path
-    except Exception as e:
-        print(f"Failed to read file: {e}")
-        return None, None
+    data_frames = []
+    time_offset = 0
+    for idx, Path in enumerate(Paths):
+        try:
+            Data = pd.read_csv(
+                Path,
+                skiprows=11,
+                header=None,
+                names=DataHeaders,
+                dtype={"Time": str},         # Read as string to clean up
+                low_memory=False             # Suppress warning
+            )
+            Data = Data.apply(pd.to_numeric, errors='coerce')
+            # Offset time for all but the first file
+            if idx > 0:
+                Data["Time"] += time_offset
+            time_offset = Data["Time"].iloc[-1]  # Update offset for next file
+            data_frames.append(Data)
+        except Exception as e:
+            print(f"Failed to read file {Path}: {e}")
 
+    if data_frames:
+        merged_data = pd.concat(data_frames, ignore_index=True)
+        return merged_data, Paths
+    else:
+        return None, None
 
 def ReadIMU(prompt):
     DataHeaders = ["Time", "Ax", "Ay", "Az", "Gx", "Gy", "Gz", "Qw", "Qx", "Qy", "Qz", "Mx", "My", "Mz", "P", "T"]
-
-    Path = filedialog.askopenfilename(title=prompt)
-    if not Path:
+    Paths = filedialog.askopenfilenames(title=prompt)
+    if not Paths:
         return None, None
 
-    try:
-        Data = pd.read_csv(Path, skiprows=10, header=None, names=DataHeaders)
-        Data = Data.apply(pd.to_numeric, errors='coerce')
-        return Data, Path
-    except Exception as e:
-        print(f"Failed to read file: {e}")
+    data_frames = []
+    time_offset = 0
+    for idx, Path in enumerate(Paths):
+        try:
+            Data = pd.read_csv(
+                Path,
+                skiprows=10,
+                header=None,
+                names=DataHeaders,
+                dtype={"Time": str},         # Read as string to clean up
+                low_memory=False             # Suppress warning
+            )
+            Data = Data.apply(pd.to_numeric, errors='coerce')
+            # Offset time for all but the first file
+            if idx > 0:
+                Data["Time"] += time_offset
+            time_offset = Data["Time"].iloc[-1]  # Update offset for next file
+            data_frames.append(Data)
+        except Exception as e:
+            print(f"Failed to read file {Path}: {e}")
+
+    if data_frames:
+        merged_data = pd.concat(data_frames, ignore_index=True)
+        return merged_data, Paths
+    else:
         return None, None

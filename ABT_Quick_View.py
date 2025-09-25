@@ -12,12 +12,15 @@ def run_abt_quick_view():
     root.withdraw()  # Hide the root window
 
     while True:
-        # Get Data and filename using ReadRawData's dialog
-        Data, Path = ReadRawData.ReadABT("Select the ABT file.")
-        if Data is None:
+        # Get Data and filenames using ReadRawData's dialog
+        Data, Paths = ReadRawData.ReadABT("Select one or more ABT files.")
+        if Data is None or Paths is None:
             print("No file selected. Exiting.")
             break
-        file_name = os.path.basename(Path)
+
+        # If you want to display all file names:
+        file_names = [os.path.basename(p) for p in Paths]
+        file_name_display = os.path.basename(Paths[0])
 
         # Use the format_and_smooth_abt_data function from Conversions
         DataUnits = Conversions.format_and_smooth_abt_data(Data)
@@ -30,7 +33,7 @@ def run_abt_quick_view():
         
 
         fig, ax1 = plt.subplots()
-        fig.canvas.manager.set_window_title(file_name)
+        fig.canvas.manager.set_window_title(file_name_display)
 
         if choice == "1":
             print("Left Click to add annotation, click and hold middle mouse to move annotation, right click to delete annotation.")
@@ -48,7 +51,7 @@ def run_abt_quick_view():
             # Add a constant 1G dashed line on the acceleration axis
             ax2.axhline(y=1, color='gray', linestyle='--', linewidth=3, label='1G Reference')
 
-            plt.title(file_name)
+            plt.title(file_name_display)
             fig.tight_layout()
 
             # Interactive annotations for both lines
@@ -82,7 +85,7 @@ def run_abt_quick_view():
             ax2.set_ylabel("Rate of Descent (ft/s)", color='r')
             ax2.tick_params(axis='y', labelcolor='r')
 
-            plt.title(file_name)
+            plt.title(file_name_display)
             fig.tight_layout()
 
             # Interactive annotations for both lines
