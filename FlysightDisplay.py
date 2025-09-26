@@ -50,10 +50,10 @@ def run_FlysightDisplay():
     lines.append(l3)
     labels.append("Accel Magnitude (g)")
 
-    # Add a horizontal line at 25 ft/s on the vertical speed axis
-    ax2.axhline(25, color="tab:orange", linestyle="--", linewidth=1.5, label="25 ft/s")
+    # Add a horizontal line at 24 ft/s on the vertical speed axis
+    ax2.axhline(24, color="tab:orange", linestyle="--", linewidth=1.5, label="24 ft/s")
     lines.append(ax2.lines[-1])
-    labels.append("25 ft/s")
+    labels.append("24 ft/s")
 
     # Combine legends
     ax1.legend(lines, labels, loc="upper right")
@@ -92,13 +92,6 @@ def run_FlysightDisplay():
         selected_points.append(i)
         if len(selected_points) > 2:
             selected_points.pop(0)
-        if len(selected_points) == 2:
-            idx1, idx2 = selected_points
-            alt1 = df.iloc[idx1]["KF Altitude (ft)"]
-            alt2 = df.iloc[idx2]["KF Altitude (ft)"]
-            delta = alt2 - alt1
-            # Display as a popup annotation at the second point
-            sel.annotation.set_text(sel.annotation.get_text() + f"\nΔ Altitude: {delta:.1f} ft")
 
     plt.show()
 
