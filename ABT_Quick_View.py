@@ -6,6 +6,7 @@ import ReadRawData
 import Conversions
 import mplcursors
 import os
+import math
 
 def run_abt_quick_view():
     root = tk.Tk()
@@ -98,40 +99,78 @@ def run_abt_quick_view():
                 alt = DataUnits["Smoothed Altitude MSL (ft)"].iloc[idx]
                 rod = DataUnits["rate_of_descent_ftps"].iloc[idx]
                 t = DataUnits["Time (s)"].iloc[idx]
+
+                # Convert altitude (m) to pressure (Pa)
+                altitude_m = DataUnits["Altitude MSL (m)"].iloc[idx] if "Altitude MSL (m)" in DataUnits.columns else 0.0
+                pressure0_pa = 101325
+                scale_height = 8434  # meters
+                pressure_pa = pressure0_pa * math.exp(-altitude_m / scale_height)
+
+                # SDSL correction using pressure in Pa
+                SDSL_ROD = rod * math.sqrt(pressure_pa / pressure0_pa)
+
                 sel.annotation.set(
-                    text=f"Time: {t:.2f}s\nAlt: {alt:.2f} ft\nROD: {rod:.2f} ft/s",
+                    text=f"Time: {t:.2f}s\nAlt: {alt:.2f} ft\nROD: {rod:.2f} ft/s\nSDSL ROD: {SDSL_ROD:.2f} ft/s",
                     bbox=dict(boxstyle="round", fc="yellow", alpha=0.8)
                 )
 
             # --- Custom ROD interval selection ---
             rod_points = []
+            interval_artists = []
+
+            def clear_selection(event=None):
+                rod_points.clear()
+                # Remove all interval lines, annotations, and markers
+                for artist in interval_artists:
+                    try:
+                        artist.remove()
+                    except Exception:
+                        pass
+                interval_artists.clear()
+                fig.canvas.draw_idle()
+                print("ROD interval selection cleared. You can select new points.")
+
+            def on_key(event):
+                if event.key == "c":
+                    clear_selection()
 
             def on_click(event):
-                # Prevent selection while zooming or panning
                 toolbar = plt.get_current_fig_manager().toolbar
                 if toolbar.mode != '':
                     return
 
-                if event.inaxes == ax2 and event.button == 1:  # Left click on ROD axis
+                if event.inaxes == ax2 and event.button == 1:
                     xdata = DataUnits["Time (s)"].values
                     ydata = DataUnits["rate_of_descent_ftps"].values
                     if event.xdata is None:
                         return
                     idx = (np.abs(xdata - event.xdata)).argmin()
                     rod_points.append(idx)
-                    ax2.plot(xdata[idx], ydata[idx], 'ko')  # Mark the point
+                    xlim = ax2.get_xlim()
+                    ylim = ax2.get_ylim()
+                    marker, = ax2.plot(xdata[idx], ydata[idx], 'ko')
+                    interval_artists.append(marker)
+                    fig.canvas.draw_idle()
+                    ax2.set_xlim(xlim)
+                    ax2.set_ylim(ylim)
                     fig.canvas.draw_idle()
                     if len(rod_points) == 2:
                         idx1, idx2 = sorted(rod_points)
-                        # Draw line between points
-                        ax2.plot(xdata[[idx1, idx2]], ydata[[idx1, idx2]], 'm--', lw=2)
-                        # Calculate average ROD
+                        line = ax2.plot(xdata[[idx1, idx2]], ydata[[idx1, idx2]], 'm--', lw=2)[0]
+                        interval_artists.append(line)
                         avg_rod = np.mean(ydata[idx1:idx2+1])
-                        # Annotate average ROD
+                        if "Altitude MSL (m)" in DataUnits.columns:
+                            mean_altitude_m = np.mean(DataUnits["Altitude MSL (m)"].iloc[idx1:idx2+1])
+                        else:
+                            mean_altitude_m = 0.0
+                        pressure0_pa = 101325
+                        scale_height = 8434
+                        pressure_pa = pressure0_pa * math.exp(-mean_altitude_m / scale_height)
+                        avg_SDSL_ROD = avg_rod * math.sqrt(pressure_pa / pressure0_pa)
                         mid_time = (xdata[idx1] + xdata[idx2]) / 2
                         mid_rod = (ydata[idx1] + ydata[idx2]) / 2
-                        ax2.annotate(
-                            f"Avg ROD: {avg_rod:.2f} ft/s",
+                        annotation = ax2.annotate(
+                            f"Avg ROD: {avg_rod:.2f} ft/s\nAvg SDSL ROD: {avg_SDSL_ROD:.2f} ft/s",
                             xy=(mid_time, mid_rod),
                             xytext=(0, 30),
                             textcoords="offset points",
@@ -139,10 +178,13 @@ def run_abt_quick_view():
                             bbox=dict(boxstyle="round", fc="yellow", alpha=0.8),
                             arrowprops=dict(arrowstyle="->", color='magenta')
                         )
+                        interval_artists.append(annotation)
                         fig.canvas.draw_idle()
-                        rod_points.clear()  # Reset for next selection
+                        rod_points.clear()
 
             fig.canvas.mpl_connect("button_press_event", on_click)
+            fig.canvas.mpl_connect("key_press_event", on_key)
+            print("Press 'c' to clear all interval selections and annotations from the plot.")
 
         else:
             print("Invalid choice. Please enter 1 or 2.")
