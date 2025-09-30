@@ -1,8 +1,6 @@
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
-from ahrs.filters import Madgwick
-from scipy.spatial.transform import Rotation as R
 
 #Feet to meters
 def FeetToMeters (feet):
