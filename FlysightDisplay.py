@@ -57,6 +57,45 @@ def run_FlysightDisplay():
     lines.append(ax2.lines[-1])
     labels.append("24 ft/s")
 
+    # --- AUTO-RESCALING FUNCTIONALITY ---
+    def auto_rescale_y_axes(ax1, ax2, ax3):
+        """Rescale all y-axes based on visible data in current x-range"""
+        xlim = ax1.get_xlim()
+        
+        # Get data in current x-range for each axis
+        mask = (KulCombined["Elapsed (s)"] >= xlim[0]) & (KulCombined["Elapsed (s)"] <= xlim[1])
+        
+        if mask.any():
+            # Rescale ax1 (KF Altitude)
+            visible_alt = KulCombined["KF Altitude (ft)"][mask]
+            if len(visible_alt) > 0:
+                alt_range = visible_alt.max() - visible_alt.min()
+                alt_margin = alt_range * 0.05  # 5% margin
+                ax1.set_ylim(visible_alt.min() - alt_margin, visible_alt.max() + alt_margin)
+            
+            # Rescale ax2 (KF Vertical Speed)
+            visible_vspeed = -1 * KulCombined["KF Vertical Speed (ft/s)"][mask]
+            if len(visible_vspeed) > 0:
+                vspeed_range = visible_vspeed.max() - visible_vspeed.min()
+                vspeed_margin = vspeed_range * 0.05
+                ax2.set_ylim(visible_vspeed.min() - vspeed_margin, visible_vspeed.max() + vspeed_margin)
+            
+            # Rescale ax3 (Accel Magnitude) - use combined data
+            mask_combined = (combined["Elapsed (s)"] >= xlim[0]) & (combined["Elapsed (s)"] <= xlim[1])
+            if mask_combined.any():
+                visible_accel = KulCombined["Amag (g)"][mask_combined]
+                if len(visible_accel) > 0:
+                    accel_range = visible_accel.max() - visible_accel.min()
+                    accel_margin = accel_range * 0.05
+                    ax3.set_ylim(visible_accel.min() - accel_margin, visible_accel.max() + accel_margin)
+
+    # Connect the rescaling function to zoom/pan events
+    def on_xlims_change(ax):
+        auto_rescale_y_axes(ax1, ax2, ax3)
+        fig.canvas.draw_idle()
+
+    ax1.callbacks.connect('xlim_changed', on_xlims_change)
+
     # Combine legends
     ax1.legend(lines, labels, loc="upper right")
     plt.title("Kalman Fused Altitude, Vertical Speed, and Accel Magnitude")
@@ -97,13 +136,41 @@ def run_FlysightDisplay():
 
     plt.show()
 
-    # Plot all three on the same axis for comparison
-    fig, ax = plt.subplots()
+    # Plot all three on the same axis for comparison - WITH AUTO-RESCALING
+    fig2, ax = plt.subplots()
     ax.set_xlabel("Elapsed Time (s)")
     ax.set_ylabel("Altitude (ft)")
     l_kf, = ax.plot(KulCombined["Elapsed (s)"], KulCombined["KF Altitude (ft)"], label="KF Altitude (ft)", color="tab:blue")
     l_gps, = ax.plot(combined["Elapsed (s)"], combined["Altitude MSL (m) (filtered)"] * 3.28084, label="GPS Altitude (ft)", color="tab:orange", alpha=0.6)
     l_baro, = ax.plot(combined["Elapsed (s)"], combined["Baro Altitude (m)"] * 3.28084, label="Baro Altitude (ft)", color="tab:green", alpha=0.6)
+    
+    # Auto-rescaling for the comparison plot
+    def auto_rescale_altitude_comparison():
+        xlim = ax.get_xlim()
+        
+        # Get all altitude data in current x-range
+        mask_kul = (KulCombined["Elapsed (s)"] >= xlim[0]) & (KulCombined["Elapsed (s)"] <= xlim[1])
+        mask_combined = (combined["Elapsed (s)"] >= xlim[0]) & (combined["Elapsed (s)"] <= xlim[1])
+        
+        all_alts = []
+        if mask_kul.any():
+            all_alts.extend(KulCombined["KF Altitude (ft)"][mask_kul])
+        if mask_combined.any():
+            all_alts.extend(combined["Altitude MSL (m) (filtered)"][mask_combined] * 3.28084)
+            all_alts.extend(combined["Baro Altitude (m)"][mask_combined] * 3.28084)
+        
+        if all_alts:
+            alt_min, alt_max = min(all_alts), max(all_alts)
+            alt_range = alt_max - alt_min
+            alt_margin = alt_range * 0.05
+            ax.set_ylim(alt_min - alt_margin, alt_max + alt_margin)
+
+    def on_xlims_change_comparison(ax):
+        auto_rescale_altitude_comparison()
+        fig2.canvas.draw_idle()
+
+    ax.callbacks.connect('xlim_changed', on_xlims_change_comparison)
+    
     ax.legend(loc="upper right")
     plt.title("Kalman Filter vs. Raw GPS and Baro Altitude")
     plt.tight_layout()
