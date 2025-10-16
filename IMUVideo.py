@@ -6,6 +6,7 @@ import ReadRawData
 import Conversions
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import os
 
 def IMUVideo():
 
@@ -28,8 +29,13 @@ def IMUVideo():
             exit()
 
         # --- LOAD DATA ---
-        raw_df, _ = ReadRawData.ReadIMU("Select the IMU file.")
-        df = Conversions.format_and_smooth_imu_data(raw_df)  # Use your smoothing function
+        # Get Data and filenames using ReadRawData's dialog
+        Data, file_paths = ReadRawData.ReadIMU("Select one or more IMU file(s).")
+        if Data is None or file_paths is None:
+            print("No file selected. Exiting.")
+            break
+        file_name = os.path.basename(file_paths[0])
+        df = Conversions.format_and_smooth_imu_data(Data)  # Use your smoothing function
 
         # --- Let user pick landing in IMU data by clicking the graph interactively ---
         clicked_time = []
