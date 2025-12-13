@@ -10,7 +10,7 @@ class DARTSimulatorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("DART Trajectory Simulator")
-        self.root.geometry("1200x800")
+        self.root.geometry("1400x800")
         
         # Default parameters
         self.params = {
@@ -24,7 +24,17 @@ class DARTSimulatorGUI:
             'dragCoefficient': 0.47
         }
         
-        self.trajectory_history = []
+        # Unit conversion factors to metric
+        self.unit_conversions = {
+            'altitude': {'m': 1.0, 'ft': 0.3048, 'km': 1000.0},
+            'mass': {'kg': 1.0, 'lb': 0.453592, 'g': 0.001},
+            'dragArea': {'m²': 1.0, 'ft²': 0.092903, 'cm²': 0.0001},
+            'ViVertical': {'m/s': 1.0, 'ft/s': 0.3048, 'km/h': 0.277778, 'mph': 0.44704},
+            'ViHorizontal': {'m/s': 1.0, 'ft/s': 0.3048, 'km/h': 0.277778, 'mph': 0.44704},
+            'timeStep': {'s': 1.0, 'ms': 0.001},
+            'g': {'m/s²': 1.0, 'ft/s²': 0.3048}
+        }
+        
         self.setup_gui()
         
     def setup_gui(self):
@@ -45,25 +55,41 @@ class DARTSimulatorGUI:
         param_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.param_vars = {}
+        self.unit_vars = {}
+        
         param_labels = {
-            'altitude': 'Initial Altitude (m)',
-            'mass': 'Mass (kg)',
-            'dragArea': 'Drag Area (m²)',
-            'ViVertical': 'Initial Vertical Velocity (m/s)',
-            'ViHorizontal': 'Initial Horizontal Velocity (m/s)',
-            'timeStep': 'Time Step (s)',
-            'g': 'Gravity (m/s²)',
+            'altitude': 'Initial Altitude',
+            'mass': 'Mass',
+            'dragArea': 'Drag Area',
+            'ViVertical': 'Initial Vertical Velocity',
+            'ViHorizontal': 'Initial Horizontal Velocity',
+            'timeStep': 'Time Step',
+            'g': 'Gravity',
             'dragCoefficient': 'Drag Coefficient'
         }
         
         for i, (param, label) in enumerate(param_labels.items()):
             ttk.Label(param_frame, text=label).grid(row=i, column=0, sticky='w', pady=2)
             
+            # Value entry
             var = tk.DoubleVar(value=self.params[param])
-            entry = ttk.Entry(param_frame, textvariable=var, width=15)
-            entry.grid(row=i, column=1, sticky='ew', pady=2, padx=(10, 0))
-            
+            entry = ttk.Entry(param_frame, textvariable=var, width=12)
+            entry.grid(row=i, column=1, sticky='ew', pady=2, padx=(10, 5))
             self.param_vars[param] = var
+            
+            # Unit dropdown
+            if param in self.unit_conversions:
+                unit_var = tk.StringVar()
+                unit_options = list(self.unit_conversions[param].keys())
+                unit_var.set(unit_options[0])  # Set default to first option (metric)
+                
+                unit_combo = ttk.Combobox(param_frame, textvariable=unit_var, 
+                                        values=unit_options, width=8, state='readonly')
+                unit_combo.grid(row=i, column=2, sticky='w', pady=2, padx=(0, 10))
+                self.unit_vars[param] = unit_var
+            else:
+                # For dragCoefficient (unitless)
+                ttk.Label(param_frame, text="(unitless)").grid(row=i, column=2, sticky='w', pady=2, padx=(0, 10))
         
         param_frame.columnconfigure(1, weight=1)
         
@@ -72,9 +98,14 @@ class DARTSimulatorGUI:
         button_frame.pack(fill=tk.X, pady=10)
         
         ttk.Button(button_frame, text="Run Simulation", command=self.run_simulation).pack(fill=tk.X, pady=2)
-        ttk.Button(button_frame, text="Clear History", command=self.clear_history).pack(fill=tk.X, pady=2)
         ttk.Button(button_frame, text="Reset Parameters", command=self.reset_parameters).pack(fill=tk.X, pady=2)
-        
+    
+    def convert_to_metric(self, param, value, unit):
+        """Convert parameter value to metric units"""
+        if param in self.unit_conversions and unit in self.unit_conversions[param]:
+            return value * self.unit_conversions[param][unit]
+        return value
+    
     def setup_plot_area(self):
         # Create matplotlib figure
         self.fig = Figure(figsize=(10, 8))
@@ -181,18 +212,19 @@ class DARTSimulatorGUI:
     
     def run_simulation(self):
         try:
-            # Update parameters from GUI
+            # Update parameters from GUI with unit conversion
             for param, var in self.param_vars.items():
-                self.params[param] = var.get()
+                value = var.get()
+                if param in self.unit_vars:
+                    unit = self.unit_vars[param].get()
+                    self.params[param] = self.convert_to_metric(param, value, unit)
+                else:
+                    self.params[param] = value
             
             # Run simulation in separate thread to prevent GUI freezing
             def simulate():
                 trajectory = self.simulate_trajectory(self.params)
                 results = self.analyze_trajectory(trajectory)
-                
-                # Store trajectory
-                trajectory['results'] = results
-                self.trajectory_history.append(trajectory)
                 
                 # Update GUI in main thread
                 self.root.after(0, lambda: self.update_display(trajectory, results))
@@ -210,26 +242,18 @@ class DARTSimulatorGUI:
         self.ax3.clear()
         self.ax4.clear()
         
-        # Plot all trajectories in history
-        colors = plt.cm.viridis(np.linspace(0, 1, len(self.trajectory_history)))
+        # Plot trajectory
+        self.ax1.plot(trajectory['x'], trajectory['y'], 'b-', linewidth=2)
         
-        for i, traj in enumerate(self.trajectory_history):
-            alpha = 0.3 if i < len(self.trajectory_history) - 1 else 1.0
-            linewidth = 1 if i < len(self.trajectory_history) - 1 else 2
-            color = colors[i]
-            
-            # Trajectory plot
-            self.ax1.plot(traj['x'], traj['y'], color=color, alpha=alpha, linewidth=linewidth)
-            
-            # Speed vs time
-            speed = np.sqrt(traj['vx']**2 + traj['vy']**2)
-            self.ax2.plot(traj['time'], speed, color=color, alpha=alpha, linewidth=linewidth)
-            
-            # Horizontal velocity vs time
-            self.ax3.plot(traj['time'], traj['vx'], color=color, alpha=alpha, linewidth=linewidth)
-            
-            # Vertical velocity vs time
-            self.ax4.plot(traj['time'], traj['vy'], color=color, alpha=alpha, linewidth=linewidth)
+        # Speed vs time
+        speed = np.sqrt(trajectory['vx']**2 + trajectory['vy']**2)
+        self.ax2.plot(trajectory['time'], speed, 'b-', linewidth=2)
+        
+        # Horizontal velocity vs time
+        self.ax3.plot(trajectory['time'], trajectory['vx'], 'b-', linewidth=2)
+        
+        # Vertical velocity vs time
+        self.ax4.plot(trajectory['time'], trajectory['vy'], 'b-', linewidth=2)
         
         # Set labels and titles
         self.ax1.set_xlabel('Horizontal Distance (m)')
@@ -260,25 +284,18 @@ class DARTSimulatorGUI:
     
     def update_results_display(self, results):
         """Update the results text display"""
-        self.results_text.insert(tk.END, f"\n{'='*30}\n")
-        self.results_text.insert(tk.END, f"Simulation #{len(self.trajectory_history)}\n")
+        self.results_text.delete(1.0, tk.END)
+        self.results_text.insert(tk.END, "DART Trajectory Results\n")
+        self.results_text.insert(tk.END, "="*25 + "\n\n")
         self.results_text.insert(tk.END, f"Flight Time: {results['flight_time']:.2f} s\n")
         self.results_text.insert(tk.END, f"Range: {results['range']:.2f} m\n")
+        self.results_text.insert(tk.END, f"         {results['range']*3.28084:.2f} ft\n")
+        self.results_text.insert(tk.END, f"         {results['range']/1000:.3f} km\n")
         self.results_text.insert(tk.END, f"Impact Velocity: {results['impact_velocity']:.2f} m/s\n")
+        self.results_text.insert(tk.END, f"                 {results['impact_velocity']*3.28084:.2f} ft/s\n")
+        self.results_text.insert(tk.END, f"                 {results['impact_velocity']*2.23694:.2f} mph\n")
         self.results_text.insert(tk.END, f"Max Altitude: {results['max_altitude']:.2f} m\n")
-        
-        # Scroll to bottom
-        self.results_text.see(tk.END)
-    
-    def clear_history(self):
-        """Clear trajectory history and plots"""
-        self.trajectory_history.clear()
-        self.ax1.clear()
-        self.ax2.clear()
-        self.ax3.clear()
-        self.ax4.clear()
-        self.canvas.draw()
-        self.results_text.delete(1.0, tk.END)
+        self.results_text.insert(tk.END, f"              {results['max_altitude']*3.28084:.2f} ft\n")
     
     def reset_parameters(self):
         """Reset parameters to default values"""
@@ -295,6 +312,11 @@ class DARTSimulatorGUI:
         
         for param, value in defaults.items():
             self.param_vars[param].set(value)
+            
+        # Reset units to metric defaults
+        for param, unit_var in self.unit_vars.items():
+            unit_options = list(self.unit_conversions[param].keys())
+            unit_var.set(unit_options[0])
 
 if __name__ == "__main__":
     root = tk.Tk()
