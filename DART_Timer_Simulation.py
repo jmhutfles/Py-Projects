@@ -6,6 +6,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import threading
 import math
+import time
 
 class DARTTimerSimulationGUI:
     def __init__(self, root):
@@ -25,7 +26,7 @@ class DARTTimerSimulationGUI:
             'aircraft_horizontal_speed': 120, # Aircraft speed (KIAS)
             
             # Test parameters
-            'desired_deployment_speed': 150,  # Target deployment speed (kts SDSL)
+            'desired_deployment_speed': 150,  # Target deployment speed (KIAS)
             
             # Simulation parameters
             'time_step': 0.1,                # Simulation time step (seconds)
@@ -114,7 +115,8 @@ class DARTTimerSimulationGUI:
         test_frame.pack(fill=tk.X, pady=(0, 10))
         
         test_params = [
-            ('desired_deployment_speed', 'Target Deployment Speed', 'kts SDSL')
+            ('desired_deployment_speed', 'Target Deployment Speed', 'KIAS'),
+            ('time_step', 'Simulation Time Step', 'sec')
         ]
         
         for i, (param, label, unit) in enumerate(test_params):
@@ -137,22 +139,39 @@ class DARTTimerSimulationGUI:
                   style='Accent.TButton').pack(fill=tk.X, pady=2)
         ttk.Button(button_frame, text="Reset to Defaults", command=self.reset_parameters).pack(fill=tk.X, pady=2)
         ttk.Button(button_frame, text="Save Configuration", command=self.save_config).pack(fill=tk.X, pady=2)
+        
+        # Progress bar
+        self.progress_frame = ttk.Frame(self.control_frame)
+        self.progress_frame.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(self.progress_frame, text="Calculation Progress:").pack()
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_var, 
+                                          maximum=100, length=300)
+        self.progress_bar.pack(fill=tk.X, pady=5)
+        
+        self.progress_label = ttk.Label(self.progress_frame, text="Ready")
+        self.progress_label.pack()
     
     def setup_plot_area(self):
-        # Create matplotlib figure with multiple subplots
-        self.fig = Figure(figsize=(14, 10))
-        self.canvas = FigureCanvasTkAgg(self.fig, self.plot_frame)
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        # Create tabbed interface for plots
+        self.notebook = ttk.Notebook(self.plot_frame)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
         
-        # Create subplots for comprehensive analysis
-        self.ax1 = self.fig.add_subplot(231)  # Altitude vs Time
-        self.ax2 = self.fig.add_subplot(232)  # Speed vs Time (with SDSL correction)
-        self.ax3 = self.fig.add_subplot(233)  # Trajectory view
-        self.ax4 = self.fig.add_subplot(234)  # Drag forces
-        self.ax5 = self.fig.add_subplot(235)  # Air density vs altitude
-        self.ax6 = self.fig.add_subplot(236)  # Timer countdown visualization
+        # Tab 1: Flight Profile
+        self.tab1 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab1, text="Flight Profile")
         
-        self.fig.tight_layout(pad=3.0)
+        self.fig1 = Figure(figsize=(12, 8))
+        self.canvas1 = FigureCanvasTkAgg(self.fig1, self.tab1)
+        self.canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        self.ax1 = self.fig1.add_subplot(221)  # Altitude vs Time
+        self.ax2 = self.fig1.add_subplot(222)  # Speed vs Time
+        self.ax3 = self.fig1.add_subplot(223)  # Trajectory view
+        self.ax4 = self.fig1.add_subplot(224)  # Drag forces
+        
+        self.fig1.tight_layout(pad=3.0)
         
     def setup_results_area(self):
         # Results display
@@ -187,6 +206,21 @@ class DARTTimerSimulationGUI:
         
         return density_imperial
     
+    def calculate_kias_to_sdsl_at_altitude(self, kias_speed, altitude_ft):
+        """
+        Convert KIAS to SDSL equivalent at given altitude
+        KIAS is already corrected for instrument and position errors
+        We need to convert to true airspeed, then to SDSL equivalent
+        """
+        current_density = self.calculate_air_density(altitude_ft)
+        density_ratio = current_density / self.sdsl_density
+        
+        # Convert KIAS to true airspeed at altitude
+        true_airspeed = kias_speed / np.sqrt(density_ratio)
+        
+        # SDSL equivalent is the true airspeed
+        return true_airspeed
+    
     def calculate_sdsl_speed_correction(self, indicated_speed_kts, altitude_ft):
         """
         Calculate Standard Day Sea Level (SDSL) equivalent speed
@@ -218,12 +252,20 @@ class DARTTimerSimulationGUI:
         
         return drag_force
     
+    def update_progress(self, percent, status_text):
+        """Update progress bar and status text"""
+        self.progress_var.set(percent)
+        self.progress_label.config(text=status_text)
+        self.root.update_idletasks()
+    
     def simulate_dart_descent(self, params):
         dt = params['time_step']
         max_time = params['max_time']
         
+        print(f"Debug: Using time step = {dt} seconds")  # Debug output
+        
         # Initial conditions
-        time = [0]
+        time_array = [0]
         altitude = [params['altitude_msl']]
         
         # Convert aircraft speeds to ft/s
@@ -242,21 +284,50 @@ class DARTTimerSimulationGUI:
         # Speed tracking
         indicated_speeds = []
         sdsl_speeds = []
+        true_airspeeds = []
         drag_forces = []
         air_densities = []
         
         # Simulation state
         current_time = 0
-        parachute_deployed = False
+        timer_triggered = False  # Track when timer would trigger
         deployment_time = None
         deployment_altitude = None
         deployment_speed_sdsl = None
         
-        # Target speed in ft/s
-        target_speed_kts = params['desired_deployment_speed']
+        # Convert target KIAS to equivalent SDSL speed for comparison
+        target_speed_kias = params['desired_deployment_speed']
+        
+        # We'll compare against SDSL speed during simulation
+        # KIAS at altitude will be converted to SDSL for comparison
         
         # Simulation loop
+        iteration_count = 0
+        max_iterations = int(max_time / dt)  # Estimate total iterations
+        start_calc_time = time.time()  # Track calculation time
+        
+        print(f"Debug: Estimated iterations = {max_iterations}")  # Debug output
+        
         while current_time < max_time and y_pos[-1] > 0:
+            current_alt = y_pos[-1]
+            current_vx = vx[-1]
+            current_vy = vy[-1]
+            
+            # Update progress every 100 iterations to avoid GUI slowdown
+            iteration_count += 1
+            if iteration_count % 100 == 0:
+                progress_percent = min(95, (current_time / max_time) * 100)  # Cap at 95% until complete
+                
+                # Calculate estimated time remaining
+                elapsed_time = time.time() - start_calc_time
+                if progress_percent > 5:  # Only show estimate after some progress
+                    estimated_total = elapsed_time * 100 / progress_percent
+                    remaining_time = estimated_total - elapsed_time
+                    status_text = f"Time: {current_time:.1f}s | ETA: {remaining_time:.1f}s"
+                else:
+                    status_text = f"Time: {current_time:.1f}s | Calculating..."
+                
+                self.root.after(0, lambda p=progress_percent, t=status_text: self.update_progress(p, t))
             current_alt = y_pos[-1]
             current_vx = vx[-1]
             current_vy = vy[-1]
@@ -268,26 +339,25 @@ class DARTTimerSimulationGUI:
             # Calculate SDSL corrected speed
             sdsl_speed_kts = self.calculate_sdsl_speed_correction(velocity_kts, current_alt)
             
-            # Check for parachute deployment
-            if not parachute_deployed and sdsl_speed_kts >= target_speed_kts:
-                parachute_deployed = True
+            # Calculate true airspeed (TAS)
+            current_density = self.calculate_air_density(current_alt)
+            density_ratio = current_density / self.sdsl_density
+            true_airspeed_kts = velocity_kts / np.sqrt(density_ratio)
+            
+            # Check for timer trigger point (but don't deploy parachute)
+            if not timer_triggered and velocity_kts >= target_speed_kias:
+                timer_triggered = True  # Mark for timer calculation only
                 deployment_time = current_time
                 deployment_altitude = current_alt
                 deployment_speed_sdsl = sdsl_speed_kts
+                deployment_speed_kias = velocity_kts
             
-            # Calculate drag force
+            # Calculate drag force - ALWAYS use freefall characteristics
+            # (no parachute deployment, just mark the timer point)
             velocity_vector = np.array([current_vx, current_vy])
-            
-            if parachute_deployed:
-                # Use drogue parachute characteristics
-                drag_force = self.calculate_drag_force(velocity_vector, 
-                                                     params['drogue_drag_area'], 
-                                                     current_alt)
-            else:
-                # Use freefall DART characteristics
-                drag_force = self.calculate_drag_force(velocity_vector, 
-                                                     params['freefall_drag_area'], 
-                                                     current_alt)
+            drag_force = self.calculate_drag_force(velocity_vector, 
+                                                 params['freefall_drag_area'], 
+                                                 current_alt)
             
             # Calculate accelerations (ft/s²)
             ax = drag_force[0] / dart_mass
@@ -305,7 +375,7 @@ class DARTTimerSimulationGUI:
             current_time += dt
             
             # Store results
-            time.append(current_time)
+            time_array.append(current_time)
             altitude.append(current_alt)
             vx.append(new_vx)
             vy.append(new_vy)
@@ -313,6 +383,7 @@ class DARTTimerSimulationGUI:
             y_pos.append(new_y)
             indicated_speeds.append(velocity_kts)
             sdsl_speeds.append(sdsl_speed_kts)
+            true_airspeeds.append(true_airspeed_kts)
             drag_forces.append(np.linalg.norm(drag_force))
             air_densities.append(self.calculate_air_density(current_alt))
         
@@ -322,21 +393,26 @@ class DARTTimerSimulationGUI:
         else:
             timer_setting = None
         
+        # Final progress update
+        self.root.after(0, lambda: self.update_progress(100, "Processing results..."))
+        
         return {
-            'time': np.array(time),
+            'time': np.array(time_array),
             'altitude': np.array(y_pos),
             'x_position': np.array(x_pos),
             'velocity_x': np.array(vx),
             'velocity_y': np.array(vy),
             'indicated_speeds': np.array(indicated_speeds),
             'sdsl_speeds': np.array(sdsl_speeds),
+            'true_airspeeds': np.array(true_airspeeds),
             'drag_forces': np.array(drag_forces),
             'air_densities': np.array(air_densities),
             'deployment_time': deployment_time,
             'deployment_altitude': deployment_altitude,
-            'deployment_speed_sdsl': deployment_speed_sdsl,
+            'deployment_speed_sdsl': deployment_speed_sdsl if 'deployment_speed_sdsl' in locals() else None,
+            'deployment_speed_kias': deployment_speed_kias if 'deployment_speed_kias' in locals() else None,
             'timer_setting': timer_setting,
-            'target_speed': target_speed_kts,
+            'target_speed_kias': target_speed_kias,
             'params': params.copy()
         }
     
@@ -347,60 +423,95 @@ class DARTTimerSimulationGUI:
             for param, var in self.param_vars.items():
                 params[param] = var.get()
             
-            # Add simulation parameters that aren't in GUI
-            params['time_step'] = self.params['time_step']
+            # Add simulation parameters that aren't in GUI (but time_step IS in GUI now)
             params['max_time'] = self.params['max_time']
+            # time_step is now coming from the GUI input, don't override it
+            
+            # Reset progress bar and disable button
+            self.progress_var.set(0)
+            self.progress_label.config(text="Starting calculation...")
+            self.root.update_idletasks()
+            
+            # Find calculate button and disable it
+            for child in self.control_frame.winfo_children():
+                if isinstance(child, ttk.Frame):
+                    for button in child.winfo_children():
+                        if isinstance(button, ttk.Button) and "Calculate" in button.cget('text'):
+                            button.config(state='disabled')
             
             def simulate():
-                results = self.simulate_dart_descent(params)
-                self.root.after(0, lambda: self.update_display(results))
+                try:
+                    results = self.simulate_dart_descent(params)
+                    self.root.after(0, lambda: self.simulation_complete(results))
+                except Exception as sim_error:
+                    self.root.after(0, lambda: self.simulation_error(str(sim_error)))
             
             threading.Thread(target=simulate, daemon=True).start()
             
         except Exception as e:
             messagebox.showerror("Simulation Error", f"Simulation failed: {str(e)}")
+            self.reset_progress_bar()
+    
+    def simulation_complete(self, results):
+        """Called when simulation completes successfully"""
+        self.update_display(results)
+        self.reset_progress_bar()
+        self.progress_label.config(text="Calculation complete!")
+    
+    def simulation_error(self, error_msg):
+        """Called when simulation encounters an error"""
+        messagebox.showerror("Simulation Error", f"Simulation failed: {error_msg}")
+        self.reset_progress_bar()
+        self.progress_label.config(text="Calculation failed")
+    
+    def reset_progress_bar(self):
+        """Reset progress bar and re-enable calculate button"""
+        self.progress_var.set(0)
+        # Re-enable calculate button
+        for child in self.control_frame.winfo_children():
+            if isinstance(child, ttk.Frame):
+                for button in child.winfo_children():
+                    if isinstance(button, ttk.Button) and "Calculate" in button.cget('text'):
+                        button.config(state='normal')
     
     def update_display(self, results):
         """Update all plots and results display"""
         # Clear all plots
-        for ax in [self.ax1, self.ax2, self.ax3, self.ax4, self.ax5, self.ax6]:
+        for ax in [self.ax1, self.ax2, self.ax3, self.ax4]:
             ax.clear()
         
-        time = results['time']
+        time_data = results['time']
         
         # 1. Altitude vs Time
-        self.ax1.plot(time, results['altitude'], 'b-', linewidth=2, label='Altitude MSL')
+        self.ax1.plot(time_data, results['altitude'], 'b-', linewidth=2, label='Altitude MSL')
         if results['deployment_time']:
             self.ax1.axvline(x=results['deployment_time'], color='r', linestyle='--', 
-                           label=f'Deployment ({results["deployment_time"]:.1f}s)')
-            if results['timer_setting']:
-                self.ax1.axvline(x=results['timer_setting'], color='g', linestyle=':', 
-                               label=f'Timer Set ({results["timer_setting"]:.1f}s)')
+                           label=f'Timer Setting ({results["deployment_time"]:.1f}s)')
         self.ax1.set_xlabel('Time (s)')
         self.ax1.set_ylabel('Altitude (ft MSL)')
-        self.ax1.set_title('DART Altitude Profile')
+        self.ax1.set_title('DART Free Fall Profile (No Parachute)')
         self.ax1.grid(True, alpha=0.3)
         self.ax1.legend()
         
-        # 2. Speed vs Time (both indicated and SDSL)
-        self.ax2.plot(time[:-1], results['indicated_speeds'], 'b-', linewidth=2, label='Indicated Speed')
-        self.ax2.plot(time[:-1], results['sdsl_speeds'], 'r-', linewidth=2, label='SDSL Speed')
-        self.ax2.axhline(y=results['target_speed'], color='g', linestyle='--', 
-                        label=f'Target ({results["target_speed"]:.0f} kts SDSL)')
+        # 2. Speed vs Time (indicated and true airspeed)
+        self.ax2.plot(time_data[:-1], results['indicated_speeds'], 'b-', linewidth=2, label='Indicated Speed (KIAS)')
+        self.ax2.plot(time_data[:-1], results['true_airspeeds'], 'r-', linewidth=2, label='True Airspeed (KTAS)')
+        self.ax2.axhline(y=results['target_speed_kias'], color='g', linestyle='--', 
+                        label=f'Target ({results["target_speed_kias"]:.0f} KIAS)')
         if results['deployment_time']:
-            self.ax2.axvline(x=results['deployment_time'], color='r', linestyle='--', alpha=0.7)
+            self.ax2.axvline(x=results['deployment_time'], color='r', linestyle='--', alpha=0.7, label='Timer Setting')
         self.ax2.set_xlabel('Time (s)')
         self.ax2.set_ylabel('Speed (kts)')
-        self.ax2.set_title('DART Speed Profile')
+        self.ax2.set_title('DART Speed Profile (KIAS vs KTAS)')
         self.ax2.grid(True, alpha=0.3)
         self.ax2.legend()
         
         # 3. Trajectory View (Ground Track)
-        self.ax3.plot(results['x_position'], results['altitude'], 'b-', linewidth=2)
+        self.ax3.plot(results['x_position'], results['altitude'], 'b-', linewidth=2, label='Flight Path')
         if results['deployment_time']:
-            dep_idx = np.where(time <= results['deployment_time'])[0][-1]
+            dep_idx = np.where(time_data <= results['deployment_time'])[0][-1]
             self.ax3.plot(results['x_position'][dep_idx], results['altitude'][dep_idx], 
-                         'ro', markersize=8, label='Deployment Point')
+                         'ro', markersize=8, label='Timer Setting Point')
         self.ax3.set_xlabel('Horizontal Distance (ft)')
         self.ax3.set_ylabel('Altitude (ft MSL)')
         self.ax3.set_title('DART Trajectory')
@@ -408,7 +519,7 @@ class DARTTimerSimulationGUI:
         self.ax3.legend()
         
         # 4. Drag Forces
-        self.ax4.plot(time[:-1], results['drag_forces'], 'g-', linewidth=2)
+        self.ax4.plot(time_data[:-1], results['drag_forces'], 'g-', linewidth=2)
         if results['deployment_time']:
             self.ax4.axvline(x=results['deployment_time'], color='r', linestyle='--', alpha=0.7)
         self.ax4.set_xlabel('Time (s)')
@@ -416,35 +527,8 @@ class DARTTimerSimulationGUI:
         self.ax4.set_title('Drag Force vs Time')
         self.ax4.grid(True, alpha=0.3)
         
-        # 5. Air Density vs Altitude
-        self.ax5.plot(results['air_densities'], results['altitude'][:-1], 'm-', linewidth=2)
-        self.ax5.set_xlabel('Air Density (slugs/ft³)')
-        self.ax5.set_ylabel('Altitude (ft MSL)')
-        self.ax5.set_title('Atmospheric Density Profile')
-        self.ax5.grid(True, alpha=0.3)
-        
-        # 6. Timer Countdown Visualization
-        if results['timer_setting'] and results['deployment_time']:
-            countdown_time = np.linspace(0, results['deployment_time'], 100)
-            timer_countdown = results['deployment_time'] - countdown_time
-            timer_countdown = np.maximum(timer_countdown, 0)
-            
-            self.ax6.plot(countdown_time, timer_countdown, 'r-', linewidth=3, label='Timer Countdown')
-            self.ax6.axhline(y=0, color='g', linestyle='--', label='Deployment Command')
-            self.ax6.axvline(x=results['timer_setting'], color='g', linestyle=':', label='Timer Expires')
-            self.ax6.set_xlabel('Time (s)')
-            self.ax6.set_ylabel('Timer Remaining (s)')
-            self.ax6.set_title('Timer Countdown')
-            self.ax6.grid(True, alpha=0.3)
-            self.ax6.legend()
-        else:
-            self.ax6.text(0.5, 0.5, 'Timer calculation failed\nTarget speed not reached', 
-                         ha='center', va='center', transform=self.ax6.transAxes,
-                         fontsize=12, color='red')
-            self.ax6.set_title('Timer Calculation Status')
-        
-        self.fig.tight_layout(pad=3.0)
-        self.canvas.draw()
+        self.fig1.tight_layout(pad=3.0)
+        self.canvas1.draw()
         
         self.update_results_display(results)
     
@@ -460,31 +544,34 @@ class DARTTimerSimulationGUI:
             self.results_text.insert(tk.END, "🎯 TIMER SETTING RESULT:\n")
             self.results_text.insert(tk.END, f"   SET TIMER TO: {results['timer_setting']:.1f} SECONDS\n\n")
             
-            self.results_text.insert(tk.END, "📊 DEPLOYMENT ANALYSIS:\n")
-            self.results_text.insert(tk.END, f"   • Deployment Time: {results['deployment_time']:.1f} s\n")
-            self.results_text.insert(tk.END, f"   • Deployment Altitude: {results['deployment_altitude']:.0f} ft MSL\n")
-            self.results_text.insert(tk.END, f"   • Deployment Speed (SDSL): {results['deployment_speed_sdsl']:.1f} kts\n")
-            self.results_text.insert(tk.END, f"   • Target Speed (SDSL): {results['target_speed']:.0f} kts\n\n")
+            self.results_text.insert(tk.END, "📊 TIMER TRIGGER ANALYSIS:\n")
+            self.results_text.insert(tk.END, f"   • Timer Trigger Time: {results['deployment_time']:.1f} s\n")
+            self.results_text.insert(tk.END, f"   • Trigger Altitude: {results['deployment_altitude']:.0f} ft MSL\n")
+            self.results_text.insert(tk.END, f"   • Trigger Speed: {results.get('deployment_speed_kias', 0):.1f} KIAS\n")
+            self.results_text.insert(tk.END, f"   • Target Speed: {results['target_speed_kias']:.0f} KIAS\n\n")
         else:
             self.results_text.insert(tk.END, "❌ TIMER CALCULATION FAILED!\n")
             self.results_text.insert(tk.END, "   Target deployment speed not reached.\n")
-            max_sdsl = np.max(results['sdsl_speeds']) if len(results['sdsl_speeds']) > 0 else 0
-            self.results_text.insert(tk.END, f"   Maximum SDSL speed achieved: {max_sdsl:.1f} kts\n")
-            self.results_text.insert(tk.END, f"   Target speed required: {results['target_speed']:.0f} kts\n\n")
+            self.results_text.insert(tk.END, "❌ TIMER CALCULATION FAILED!\n")
+            self.results_text.insert(tk.END, "   Target deployment speed not reached.\n")
+            max_kias = np.max(results['indicated_speeds']) if len(results['indicated_speeds']) > 0 else 0
+            self.results_text.insert(tk.END, f"   Maximum speed achieved: {max_kias:.1f} KIAS\n")
+            self.results_text.insert(tk.END, f"   Target speed required: {results['target_speed_kias']:.0f} KIAS\n\n")
         
         # Flight Performance Summary
-        self.results_text.insert(tk.END, "🚀 FLIGHT PERFORMANCE:\n")
+        self.results_text.insert(tk.END, f"🚀 FREE FALL IMPACT ANALYSIS:\n")
         final_time = results['time'][-1]
         final_alt = results['altitude'][-1]
         max_range = results['x_position'][-1]
+        final_speed = results['indicated_speeds'][-1] if len(results['indicated_speeds']) > 0 else 0
         max_indicated_speed = np.max(results['indicated_speeds']) if len(results['indicated_speeds']) > 0 else 0
-        max_sdsl_speed = np.max(results['sdsl_speeds']) if len(results['sdsl_speeds']) > 0 else 0
+        max_true_airspeed = np.max(results['true_airspeeds']) if len(results['true_airspeeds']) > 0 else 0
         
-        self.results_text.insert(tk.END, f"   • Total Flight Time: {final_time:.1f} s\n")
-        self.results_text.insert(tk.END, f"   • Final Altitude: {final_alt:.0f} ft MSL\n")
+        self.results_text.insert(tk.END, f"   • Total Fall Time: {final_time:.1f} s\n")
+        self.results_text.insert(tk.END, f"   • Impact Speed: {final_speed:.1f} KIAS (NO PARACHUTE!)\n")
         self.results_text.insert(tk.END, f"   • Horizontal Range: {max_range:.0f} ft ({max_range/5280:.1f} miles)\n")
-        self.results_text.insert(tk.END, f"   • Max Indicated Speed: {max_indicated_speed:.1f} kts\n")
-        self.results_text.insert(tk.END, f"   • Max SDSL Speed: {max_sdsl_speed:.1f} kts\n\n")
+        self.results_text.insert(tk.END, f"   • Max Indicated Speed: {max_indicated_speed:.1f} KIAS\n")
+        self.results_text.insert(tk.END, f"   • Max True Airspeed: {max_true_airspeed:.1f} KTAS\n\n")
         
         # Test Configuration Summary
         self.results_text.insert(tk.END, "⚙️ TEST CONFIGURATION:\n")
@@ -494,14 +581,7 @@ class DARTTimerSimulationGUI:
         self.results_text.insert(tk.END, f"   • Drogue Drag Area x Cd: {params['drogue_drag_area']:.1f} sq ft\n")
         self.results_text.insert(tk.END, f"   • Aircraft Speed: {params['aircraft_horizontal_speed']:.0f} KIAS\n")
         self.results_text.insert(tk.END, f"   • Drop Altitude: {params['altitude_msl']:.0f} ft MSL\n\n")
-        
-        # Safety Notes
-        self.results_text.insert(tk.END, "⚠️ SAFETY NOTES:\n")
-        self.results_text.insert(tk.END, "   • Verify timer setting before flight\n")
-        self.results_text.insert(tk.END, "   • Account for actual weather conditions\n")
-        self.results_text.insert(tk.END, "   • Check DART weight and balance\n")
-        self.results_text.insert(tk.END, "   • Confirm drogue packing and rigging\n")
-        self.results_text.insert(tk.END, "   • Brief aircraft crew on timing\n\n")
+
         
         if results['timer_setting'] is not None:
             self.results_text.insert(tk.END, "✅ READY FOR TEST DISPATCH!")
