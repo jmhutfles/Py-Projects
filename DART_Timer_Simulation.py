@@ -20,7 +20,6 @@ class DARTTimerSimulationGUI:
             'altitude_msl': 15000,           # Drop altitude MSL (ft)
             'dart_weight': 150,              # DART weight (lbs)
             'freefall_drag_area': 0.125,    # DART freefall drag area x Cd (sq ft)
-            'drogue_drag_area': 10.4,       # Drogue parachute drag area x Cd (sq ft)
             
             # Aircraft parameters
             'aircraft_horizontal_speed': 120, # Aircraft speed (KIAS)
@@ -73,8 +72,7 @@ class DARTTimerSimulationGUI:
         vehicle_params = [
             ('altitude_msl', 'Drop Altitude MSL', 'ft'),
             ('dart_weight', 'DART Weight', 'lbs'),
-            ('freefall_drag_area', 'Freefall Drag Area x Cd', 'sq ft'),
-            ('drogue_drag_area', 'Drogue Drag Area x Cd', 'sq ft')
+            ('freefall_drag_area', 'Freefall Drag Area x Cd', 'sq ft')
         ]
         
         for i, (param, label, unit) in enumerate(vehicle_params):
@@ -209,30 +207,30 @@ class DARTTimerSimulationGUI:
     def calculate_kias_to_sdsl_at_altitude(self, kias_speed, altitude_ft):
         """
         Convert KIAS to SDSL equivalent at given altitude
-        KIAS is already corrected for instrument and position errors
-        We need to convert to true airspeed, then to SDSL equivalent
+        KIAS represents what the airspeed indicator shows
+        SDSL is the equivalent speed at standard day sea level conditions
         """
+        # First convert KIAS to true airspeed at current altitude
         current_density = self.calculate_air_density(altitude_ft)
         density_ratio = current_density / self.sdsl_density
-        
-        # Convert KIAS to true airspeed at altitude
         true_airspeed = kias_speed / np.sqrt(density_ratio)
         
-        # SDSL equivalent is the true airspeed
+        # SDSL equivalent is the true airspeed (since SDSL is true airspeed at sea level standard)
         return true_airspeed
     
     def calculate_sdsl_speed_correction(self, indicated_speed_kts, altitude_ft):
         """
         Calculate Standard Day Sea Level (SDSL) equivalent speed
-        This corrects for air density changes with altitude
+        Input: Indicated airspeed (KIAS)
+        Output: SDSL equivalent speed (what the speed would be at sea level standard conditions)
         """
+        # Convert KIAS to true airspeed at current altitude
         current_density = self.calculate_air_density(altitude_ft)
         density_ratio = current_density / self.sdsl_density
+        true_airspeed = indicated_speed_kts / np.sqrt(density_ratio)
         
-        # SDSL speed = indicated speed * sqrt(density ratio)
-        sdsl_speed = indicated_speed_kts * np.sqrt(density_ratio)
-        
-        return sdsl_speed
+        # SDSL speed is the true airspeed (since SDSL assumes sea level standard conditions)
+        return true_airspeed
     
     def calculate_drag_force(self, velocity_vector, drag_area_cd, altitude_ft):
         """Calculate drag force vector given velocity, drag area x Cd, and altitude"""
@@ -269,7 +267,13 @@ class DARTTimerSimulationGUI:
         altitude = [params['altitude_msl']]
         
         # Convert aircraft speeds to ft/s
-        vx_initial = params['aircraft_horizontal_speed'] * self.conversions['kts_to_mps'] / self.conversions['ft_to_m']  # ft/s
+        # Aircraft speed input is KIAS, convert to true airspeed at drop altitude
+        aircraft_kias = params['aircraft_horizontal_speed']
+        drop_altitude_density = self.calculate_air_density(params['altitude_msl'])
+        density_ratio_drop = drop_altitude_density / self.sdsl_density
+        aircraft_true_airspeed = aircraft_kias / np.sqrt(density_ratio_drop)  # Convert KIAS to TAS
+        
+        vx_initial = aircraft_true_airspeed * self.conversions['kts_to_mps'] / self.conversions['ft_to_m']  # ft/s
         vy_initial = 0.0  # ft/s (aircraft has no initial vertical speed)
         
         vx = [vx_initial]  # Horizontal velocity (ft/s)
@@ -294,6 +298,12 @@ class DARTTimerSimulationGUI:
         deployment_time = None
         deployment_altitude = None
         deployment_speed_sdsl = None
+        deployment_speed_kias = None
+        
+        # Track speed trend to handle both acceleration and deceleration
+        previous_speed = 0
+        speed_trend_samples = []
+        target_crossed = False
         
         # Convert target KIAS to equivalent SDSL speed for comparison
         target_speed_kias = params['desired_deployment_speed']
@@ -332,25 +342,59 @@ class DARTTimerSimulationGUI:
             current_vx = vx[-1]
             current_vy = vy[-1]
             
-            # Calculate current indicated speed (kts)
+            # Calculate current true airspeed (TAS) first
             velocity_fts = np.sqrt(current_vx**2 + current_vy**2)
-            velocity_kts = velocity_fts * self.conversions['ft_to_m'] / self.conversions['kts_to_mps']
+            true_airspeed_kts = velocity_fts * self.conversions['ft_to_m'] / self.conversions['kts_to_mps']
+            
+            # Calculate indicated airspeed (KIAS) from true airspeed
+            # KIAS = TAS * sqrt(density_ratio)
+            current_density = self.calculate_air_density(current_alt)
+            density_ratio = current_density / self.sdsl_density
+            velocity_kts = true_airspeed_kts * np.sqrt(density_ratio)  # This is KIAS
             
             # Calculate SDSL corrected speed
             sdsl_speed_kts = self.calculate_sdsl_speed_correction(velocity_kts, current_alt)
             
-            # Calculate true airspeed (TAS)
-            current_density = self.calculate_air_density(current_alt)
-            density_ratio = current_density / self.sdsl_density
-            true_airspeed_kts = velocity_kts / np.sqrt(density_ratio)
-            
-            # Check for timer trigger point (but don't deploy parachute)
-            if not timer_triggered and velocity_kts >= target_speed_kias:
-                timer_triggered = True  # Mark for timer calculation only
-                deployment_time = current_time
-                deployment_altitude = current_alt
-                deployment_speed_sdsl = sdsl_speed_kts
-                deployment_speed_kias = velocity_kts
+            # Check for timer trigger point (handle both acceleration and deceleration)
+            if not timer_triggered:
+                # Track speed trend over last few samples
+                speed_trend_samples.append(velocity_kts)
+                if len(speed_trend_samples) > 10:  # Keep last 10 samples
+                    speed_trend_samples.pop(0)
+                
+                # Determine if we're accelerating or decelerating
+                if len(speed_trend_samples) >= 5:
+                    recent_trend = speed_trend_samples[-1] - speed_trend_samples[-5]
+                    is_accelerating = recent_trend > 0.1  # Accelerating
+                    is_decelerating = recent_trend < -0.1  # Decelerating
+                    
+                    # Check for target speed crossing
+                    if is_accelerating and velocity_kts >= target_speed_kias and previous_speed < target_speed_kias:
+                        # Accelerating and just crossed target speed upward
+                        timer_triggered = True
+                        deployment_time = current_time
+                        deployment_altitude = current_alt
+                        deployment_speed_sdsl = sdsl_speed_kts
+                        deployment_speed_kias = velocity_kts
+                        target_crossed = True
+                    elif is_decelerating and velocity_kts <= target_speed_kias and previous_speed > target_speed_kias:
+                        # Decelerating and just crossed target speed downward
+                        timer_triggered = True
+                        deployment_time = current_time
+                        deployment_altitude = current_alt
+                        deployment_speed_sdsl = sdsl_speed_kts
+                        deployment_speed_kias = velocity_kts
+                        target_crossed = True
+                    elif not is_accelerating and not is_decelerating and abs(velocity_kts - target_speed_kias) < 1.0:
+                        # Near steady state at target speed
+                        timer_triggered = True
+                        deployment_time = current_time
+                        deployment_altitude = current_alt
+                        deployment_speed_sdsl = sdsl_speed_kts
+                        deployment_speed_kias = velocity_kts
+                        target_crossed = True
+                
+                previous_speed = velocity_kts
             
             # Calculate drag force - ALWAYS use freefall characteristics
             # (no parachute deployment, just mark the timer point)
@@ -411,6 +455,7 @@ class DARTTimerSimulationGUI:
             'deployment_altitude': deployment_altitude,
             'deployment_speed_sdsl': deployment_speed_sdsl if 'deployment_speed_sdsl' in locals() else None,
             'deployment_speed_kias': deployment_speed_kias if 'deployment_speed_kias' in locals() else None,
+            'target_crossed': target_crossed if 'target_crossed' in locals() else False,
             'timer_setting': timer_setting,
             'target_speed_kias': target_speed_kias,
             'params': params.copy()
@@ -551,11 +596,10 @@ class DARTTimerSimulationGUI:
             self.results_text.insert(tk.END, f"   • Target Speed: {results['target_speed_kias']:.0f} KIAS\n\n")
         else:
             self.results_text.insert(tk.END, "❌ TIMER CALCULATION FAILED!\n")
-            self.results_text.insert(tk.END, "   Target deployment speed not reached.\n")
-            self.results_text.insert(tk.END, "❌ TIMER CALCULATION FAILED!\n")
-            self.results_text.insert(tk.END, "   Target deployment speed not reached.\n")
+            self.results_text.insert(tk.END, "   Target deployment speed not reached or crossed.\n")
             max_kias = np.max(results['indicated_speeds']) if len(results['indicated_speeds']) > 0 else 0
-            self.results_text.insert(tk.END, f"   Maximum speed achieved: {max_kias:.1f} KIAS\n")
+            min_kias = np.min(results['indicated_speeds']) if len(results['indicated_speeds']) > 0 else 0
+            self.results_text.insert(tk.END, f"   Speed range: {min_kias:.1f} - {max_kias:.1f} KIAS\n")
             self.results_text.insert(tk.END, f"   Target speed required: {results['target_speed_kias']:.0f} KIAS\n\n")
         
         # Flight Performance Summary
@@ -578,7 +622,6 @@ class DARTTimerSimulationGUI:
         params = results['params']
         self.results_text.insert(tk.END, f"   • DART Weight: {params['dart_weight']:.0f} lbs\n")
         self.results_text.insert(tk.END, f"   • Freefall Drag Area x Cd: {params['freefall_drag_area']:.3f} sq ft\n")
-        self.results_text.insert(tk.END, f"   • Drogue Drag Area x Cd: {params['drogue_drag_area']:.1f} sq ft\n")
         self.results_text.insert(tk.END, f"   • Aircraft Speed: {params['aircraft_horizontal_speed']:.0f} KIAS\n")
         self.results_text.insert(tk.END, f"   • Drop Altitude: {params['altitude_msl']:.0f} ft MSL\n\n")
 
@@ -594,7 +637,6 @@ class DARTTimerSimulationGUI:
             'altitude_msl': 15000,
             'dart_weight': 150,
             'freefall_drag_area': 0.125,
-            'drogue_drag_area': 10.4,
             'aircraft_horizontal_speed': 120,
             'desired_deployment_speed': 150,
             'time_step': 0.1,
