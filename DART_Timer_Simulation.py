@@ -136,7 +136,6 @@ class DARTTimerSimulationGUI:
         ttk.Button(button_frame, text="Calculate Timer Setting", command=self.run_simulation, 
                   style='Accent.TButton').pack(fill=tk.X, pady=2)
         ttk.Button(button_frame, text="Reset to Defaults", command=self.reset_parameters).pack(fill=tk.X, pady=2)
-        ttk.Button(button_frame, text="Save Configuration", command=self.save_config).pack(fill=tk.X, pady=2)
         
         # Progress bar
         self.progress_frame = ttk.Frame(self.control_frame)
@@ -700,29 +699,7 @@ class DARTTimerSimulationGUI:
             if param in self.param_vars:
                 self.param_vars[param].set(value)
     
-    def save_config(self):
-        """Save current configuration to a file"""
-        try:
-            import json
-            from tkinter import filedialog
-            
-            config = {}
-            for param, var in self.param_vars.items():
-                config[param] = var.get()
-            
-            filename = filedialog.asksaveasfilename(
-                defaultextension=".json",
-                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-                title="Save DART Configuration"
-            )
-            
-            if filename:
-                with open(filename, 'w') as f:
-                    json.dump(config, f, indent=4)
-                messagebox.showinfo("Success", "Configuration saved successfully!")
-                
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save configuration: {str(e)}")
+
 
 if __name__ == "__main__":
     root = tk.Tk()
