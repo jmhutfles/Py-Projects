@@ -20,6 +20,7 @@ class DARTTimerSimulationGUI:
             'altitude_msl': 15000,           # Drop altitude MSL (ft)
             'dart_weight': 150,              # DART weight (lbs)
             'freefall_drag_area': 0.125,    # DART freefall drag area x Cd (sq ft)
+            'ip_elevation': 1000,            # Impact point elevation (ft MSL)
             
             # Aircraft parameters
             'aircraft_horizontal_speed': 120, # Aircraft speed (KIAS)
@@ -72,7 +73,8 @@ class DARTTimerSimulationGUI:
         vehicle_params = [
             ('altitude_msl', 'Drop Altitude MSL', 'ft'),
             ('dart_weight', 'DART Weight', 'lbs'),
-            ('freefall_drag_area', 'Freefall Drag Area x Cd', 'sq ft')
+            ('freefall_drag_area', 'Freefall Drag Area x Cd', 'sq ft'),
+            ('ip_elevation', 'IP Elevation', 'ft MSL')
         ]
         
         for i, (param, label, unit) in enumerate(vehicle_params):
@@ -295,8 +297,9 @@ class DARTTimerSimulationGUI:
     def simulate_dart_descent(self, params):
         dt = params['time_step']
         max_time = params['max_time']
+        ip_elevation = params['ip_elevation']  # Impact point elevation
         
-        print(f"Debug: Using time step = {dt} seconds")  # Debug output
+        #print(f"Debug: Using time step = {dt} seconds")  # Debug output
         
         # Initial conditions
         time_array = [0]
@@ -352,9 +355,9 @@ class DARTTimerSimulationGUI:
         max_iterations = int(max_time / dt)  # Estimate total iterations
         start_calc_time = time.time()  # Track calculation time
         
-        print(f"Debug: Estimated iterations = {max_iterations}")  # Debug output
+        #print(f"Debug: Estimated iterations = {max_iterations}")  # Debug output
         
-        while current_time < max_time and y_pos[-1] > 0:
+        while current_time < max_time and y_pos[-1] > ip_elevation:
             current_alt = y_pos[-1]
             current_vx = vx[-1]
             current_vy = vy[-1]
@@ -565,6 +568,12 @@ class DARTTimerSimulationGUI:
         
         # Tab 1: Altitude Profile
         self.ax1.plot(time_data, results['altitude'], 'b-', linewidth=2, label='Altitude MSL')
+        
+        # Add IP elevation reference line
+        ip_elevation = float(self.param_vars['ip_elevation'].get())
+        self.ax1.axhline(y=ip_elevation, color='brown', linestyle='-.', linewidth=2, alpha=0.7, 
+                        label=f'IP Elevation: {ip_elevation:.0f} ft MSL')
+        
         if results['deployment_time']:
             self.ax1.axvline(x=results['deployment_time'], color='r', linestyle='--', 
                            label=f'Timer Setting ({results["deployment_time"]:.1f}s)', linewidth=2)
@@ -598,6 +607,13 @@ class DARTTimerSimulationGUI:
         
         # Tab 3: Trajectory View
         self.ax3.plot(results['x_position'], results['altitude'], 'purple', linewidth=2, label='Flight Path')
+        
+        # Add IP elevation reference line
+        ip_elevation = float(self.param_vars['ip_elevation'].get())
+        x_range = [min(results['x_position']), max(results['x_position'])]
+        self.ax3.plot(x_range, [ip_elevation, ip_elevation], 'brown', linestyle='-.', linewidth=2, alpha=0.7,
+                     label=f'IP Elevation: {ip_elevation:.0f} ft MSL')
+        
         if results['deployment_time']:
             dep_idx = np.where(time_data <= results['deployment_time'])[0][-1]
             self.ax3.plot(results['x_position'][dep_idx], results['altitude'][dep_idx], 
@@ -644,6 +660,11 @@ class DARTTimerSimulationGUI:
             self.results_text.insert(tk.END, "📊 TIMER TRIGGER ANALYSIS:\n")
             self.results_text.insert(tk.END, f"   • Timer Trigger Time: {results['deployment_time']:.1f} s\n")
             self.results_text.insert(tk.END, f"   • Trigger Altitude: {results['deployment_altitude']:.0f} ft MSL\n")
+            
+            # Calculate and display AGL altitude at trigger
+            trigger_altitude_agl = results['deployment_altitude'] - results['params']['ip_elevation']
+            self.results_text.insert(tk.END, f"   • Trigger Altitude: {trigger_altitude_agl:.0f} ft AGL\n")
+            
             self.results_text.insert(tk.END, f"   • Trigger Speed: {results.get('deployment_speed_kias', 0):.1f} KIAS\n")
             self.results_text.insert(tk.END, f"   • Target Speed: {results['target_speed_kias']:.0f} KIAS\n\n")
         else:
@@ -658,6 +679,7 @@ class DARTTimerSimulationGUI:
         self.results_text.insert(tk.END, f"🚀 FREE FALL IMPACT ANALYSIS:\n")
         final_time = results['time'][-1]
         final_alt = results['altitude'][-1]
+        final_alt_agl = final_alt - results['params']['ip_elevation']
         max_range = results['x_position'][-1]
         final_speed = results['indicated_speeds'][-1] if len(results['indicated_speeds']) > 0 else 0
         max_indicated_speed = np.max(results['indicated_speeds']) if len(results['indicated_speeds']) > 0 else 0
@@ -665,6 +687,7 @@ class DARTTimerSimulationGUI:
         
         self.results_text.insert(tk.END, f"   • Total Fall Time: {final_time:.1f} s\n")
         self.results_text.insert(tk.END, f"   • Impact Speed: {final_speed:.1f} KIAS (NO PARACHUTE!)\n")
+        self.results_text.insert(tk.END, f"   • Final Altitude: {final_alt_agl:.0f} ft AGL\n")
         self.results_text.insert(tk.END, f"   • Horizontal Range: {max_range:.0f} ft ({max_range/5280:.1f} miles)\n")
         self.results_text.insert(tk.END, f"   • Max Indicated Speed: {max_indicated_speed:.1f} KIAS\n")
         self.results_text.insert(tk.END, f"   • Max True Airspeed: {max_true_airspeed:.1f} KTAS\n\n")
@@ -675,7 +698,8 @@ class DARTTimerSimulationGUI:
         self.results_text.insert(tk.END, f"   • DART Weight: {params['dart_weight']:.0f} lbs\n")
         self.results_text.insert(tk.END, f"   • Freefall Drag Area x Cd: {params['freefall_drag_area']:.3f} sq ft\n")
         self.results_text.insert(tk.END, f"   • Aircraft Speed: {params['aircraft_horizontal_speed']:.0f} KIAS\n")
-        self.results_text.insert(tk.END, f"   • Drop Altitude: {params['altitude_msl']:.0f} ft MSL\n\n")
+        self.results_text.insert(tk.END, f"   • Drop Altitude: {params['altitude_msl']:.0f} ft MSL\n")
+        self.results_text.insert(tk.END, f"   • IP Elevation: {params['ip_elevation']:.0f} ft MSL\n\n")
 
         
         if results['timer_setting'] is not None:
@@ -689,6 +713,7 @@ class DARTTimerSimulationGUI:
             'altitude_msl': 15000,
             'dart_weight': 150,
             'freefall_drag_area': 0.125,
+            'ip_elevation': 1000,
             'aircraft_horizontal_speed': 120,
             'desired_deployment_speed': 150,
             'time_step': 0.1,

@@ -39,6 +39,7 @@ button_specs = [
     ("ABT Quick View", "ABT_Quick_View.py"),
     ("IMU Quick View", "IMUQuickView.py"),
     ("Flysight IMU Quick View", "FlysightDisplay.py"),
+    ("Ballistic Calculator DART", "DART_Timer_Simulation.py"),
 ]
 
 for text, script in button_specs:
