@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 import threading
 import math
@@ -165,6 +165,10 @@ class DARTTimerSimulationGUI:
         self.canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         self.ax1 = self.fig1.add_subplot(111)
         
+        # Add navigation toolbar for zoom/pan
+        self.toolbar1 = NavigationToolbar2Tk(self.canvas1, self.tab1)
+        self.toolbar1.update()
+        
         # Tab 2: Speed Profile
         self.tab2 = ttk.Frame(self.notebook)
         self.notebook.add(self.tab2, text="Speed Profile")
@@ -173,6 +177,10 @@ class DARTTimerSimulationGUI:
         self.canvas2 = FigureCanvasTkAgg(self.fig2, self.tab2)
         self.canvas2.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         self.ax2 = self.fig2.add_subplot(111)
+        
+        # Add navigation toolbar for zoom/pan
+        self.toolbar2 = NavigationToolbar2Tk(self.canvas2, self.tab2)
+        self.toolbar2.update()
         
         # Tab 3: Trajectory
         self.tab3 = ttk.Frame(self.notebook)
@@ -183,6 +191,10 @@ class DARTTimerSimulationGUI:
         self.canvas3.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         self.ax3 = self.fig3.add_subplot(111)
         
+        # Add navigation toolbar for zoom/pan
+        self.toolbar3 = NavigationToolbar2Tk(self.canvas3, self.tab3)
+        self.toolbar3.update()
+        
         # Tab 4: Drag Forces
         self.tab4 = ttk.Frame(self.notebook)
         self.notebook.add(self.tab4, text="Drag Forces")
@@ -191,6 +203,10 @@ class DARTTimerSimulationGUI:
         self.canvas4 = FigureCanvasTkAgg(self.fig4, self.tab4)
         self.canvas4.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         self.ax4 = self.fig4.add_subplot(111)
+        
+        # Add navigation toolbar for zoom/pan
+        self.toolbar4 = NavigationToolbar2Tk(self.canvas4, self.tab4)
+        self.toolbar4.update()
         
     def setup_results_area(self):
         # Results display
