@@ -156,20 +156,41 @@ class DARTTimerSimulationGUI:
         self.notebook = ttk.Notebook(self.plot_frame)
         self.notebook.pack(fill=tk.BOTH, expand=True)
         
-        # Tab 1: Flight Profile
+        # Tab 1: Altitude Profile
         self.tab1 = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab1, text="Flight Profile")
+        self.notebook.add(self.tab1, text="Altitude Profile")
         
         self.fig1 = Figure(figsize=(12, 8))
         self.canvas1 = FigureCanvasTkAgg(self.fig1, self.tab1)
         self.canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.ax1 = self.fig1.add_subplot(111)
         
-        self.ax1 = self.fig1.add_subplot(221)  # Altitude vs Time
-        self.ax2 = self.fig1.add_subplot(222)  # Speed vs Time
-        self.ax3 = self.fig1.add_subplot(223)  # Trajectory view
-        self.ax4 = self.fig1.add_subplot(224)  # Drag forces
+        # Tab 2: Speed Profile
+        self.tab2 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab2, text="Speed Profile")
         
-        self.fig1.tight_layout(pad=3.0)
+        self.fig2 = Figure(figsize=(12, 8))
+        self.canvas2 = FigureCanvasTkAgg(self.fig2, self.tab2)
+        self.canvas2.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.ax2 = self.fig2.add_subplot(111)
+        
+        # Tab 3: Trajectory
+        self.tab3 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab3, text="Trajectory")
+        
+        self.fig3 = Figure(figsize=(12, 8))
+        self.canvas3 = FigureCanvasTkAgg(self.fig3, self.tab3)
+        self.canvas3.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.ax3 = self.fig3.add_subplot(111)
+        
+        # Tab 4: Drag Forces
+        self.tab4 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab4, text="Drag Forces")
+        
+        self.fig4 = Figure(figsize=(12, 8))
+        self.canvas4 = FigureCanvasTkAgg(self.fig4, self.tab4)
+        self.canvas4.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.ax4 = self.fig4.add_subplot(111)
         
     def setup_results_area(self):
         # Results display
@@ -527,53 +548,69 @@ class DARTTimerSimulationGUI:
         
         time_data = results['time']
         
-        # 1. Altitude vs Time
+        # Tab 1: Altitude Profile
         self.ax1.plot(time_data, results['altitude'], 'b-', linewidth=2, label='Altitude MSL')
         if results['deployment_time']:
             self.ax1.axvline(x=results['deployment_time'], color='r', linestyle='--', 
-                           label=f'Timer Setting ({results["deployment_time"]:.1f}s)')
-        self.ax1.set_xlabel('Time (s)')
-        self.ax1.set_ylabel('Altitude (ft MSL)')
-        self.ax1.set_title('DART Free Fall Profile (No Parachute)')
+                           label=f'Timer Setting ({results["deployment_time"]:.1f}s)', linewidth=2)
+            # Mark deployment point
+            dep_idx = np.where(time_data <= results['deployment_time'])[0][-1]
+            self.ax1.plot(time_data[dep_idx], results['altitude'][dep_idx], 'ro', markersize=10, 
+                         label=f'Deploy Alt: {results["altitude"][dep_idx]:.0f} ft')
+        self.ax1.set_xlabel('Time (s)', fontsize=12)
+        self.ax1.set_ylabel('Altitude (ft MSL)', fontsize=12)
+        self.ax1.set_title('DART Altitude Profile', fontsize=14, fontweight='bold')
         self.ax1.grid(True, alpha=0.3)
-        self.ax1.legend()
+        self.ax1.legend(fontsize=10)
         
-        # 2. Speed vs Time (indicated and true airspeed)
+        # Tab 2: Speed Profile
         self.ax2.plot(time_data[:-1], results['indicated_speeds'], 'b-', linewidth=2, label='Indicated Speed (KIAS)')
-        self.ax2.plot(time_data[:-1], results['true_airspeeds'], 'r-', linewidth=2, label='True Airspeed (KTAS)')
-        self.ax2.axhline(y=results['target_speed_kias'], color='g', linestyle='--', 
-                        label=f'Target ({results["target_speed_kias"]:.0f} KIAS)')
+        self.ax2.plot(time_data[:-1], results['true_airspeeds'], 'g-', linewidth=2, label='True Airspeed (KTAS)')
+        self.ax2.axhline(y=results['target_speed_kias'], color='orange', linestyle=':', linewidth=3, 
+                        label=f'Target: {results["target_speed_kias"]:.0f} KIAS')
         if results['deployment_time']:
-            self.ax2.axvline(x=results['deployment_time'], color='r', linestyle='--', alpha=0.7, label='Timer Setting')
-        self.ax2.set_xlabel('Time (s)')
-        self.ax2.set_ylabel('Speed (kts)')
-        self.ax2.set_title('DART Speed Profile (KIAS vs KTAS)')
+            self.ax2.axvline(x=results['deployment_time'], color='r', linestyle='--', linewidth=2, 
+                           label=f'Timer Setting ({results["deployment_time"]:.1f}s)')
+            # Mark deployment speed
+            dep_idx = np.where(time_data[:-1] <= results['deployment_time'])[0][-1]
+            self.ax2.plot(time_data[dep_idx], results['indicated_speeds'][dep_idx], 'ro', markersize=10, 
+                         label=f'Deploy Speed: {results["indicated_speeds"][dep_idx]:.1f} KIAS')
+        self.ax2.set_xlabel('Time (s)', fontsize=12)
+        self.ax2.set_ylabel('Speed (knots)', fontsize=12)
+        self.ax2.set_title('DART Speed Profile', fontsize=14, fontweight='bold')
         self.ax2.grid(True, alpha=0.3)
-        self.ax2.legend()
+        self.ax2.legend(fontsize=10)
         
-        # 3. Trajectory View (Ground Track)
-        self.ax3.plot(results['x_position'], results['altitude'], 'b-', linewidth=2, label='Flight Path')
+        # Tab 3: Trajectory View
+        self.ax3.plot(results['x_position'], results['altitude'], 'purple', linewidth=2, label='Flight Path')
         if results['deployment_time']:
             dep_idx = np.where(time_data <= results['deployment_time'])[0][-1]
             self.ax3.plot(results['x_position'][dep_idx], results['altitude'][dep_idx], 
-                         'ro', markersize=8, label='Timer Setting Point')
-        self.ax3.set_xlabel('Horizontal Distance (ft)')
-        self.ax3.set_ylabel('Altitude (ft MSL)')
-        self.ax3.set_title('DART Trajectory')
+                         'ro', markersize=10, label=f'Timer Setting Point')
+        self.ax3.set_xlabel('Horizontal Distance (ft)', fontsize=12)
+        self.ax3.set_ylabel('Altitude (ft MSL)', fontsize=12)
+        self.ax3.set_title('DART Flight Trajectory', fontsize=14, fontweight='bold')
         self.ax3.grid(True, alpha=0.3)
-        self.ax3.legend()
+        self.ax3.legend(fontsize=10)
         
-        # 4. Drag Forces
-        self.ax4.plot(time_data[:-1], results['drag_forces'], 'g-', linewidth=2)
+        # Tab 4: Drag Forces
+        self.ax4.plot(time_data[:-1], results['drag_forces'], 'orange', linewidth=2, label='Drag Force')
+        weight = float(self.param_vars['dart_weight'].get())
+        self.ax4.axhline(y=weight, color='k', linestyle='--', linewidth=2, label=f'Weight: {weight:.0f} lbf')
         if results['deployment_time']:
-            self.ax4.axvline(x=results['deployment_time'], color='r', linestyle='--', alpha=0.7)
-        self.ax4.set_xlabel('Time (s)')
-        self.ax4.set_ylabel('Drag Force (lbf)')
-        self.ax4.set_title('Drag Force vs Time')
+            self.ax4.axvline(x=results['deployment_time'], color='r', linestyle='--', linewidth=2, 
+                           label=f'Timer Setting ({results["deployment_time"]:.1f}s)')
+        self.ax4.set_xlabel('Time (s)', fontsize=12)
+        self.ax4.set_ylabel('Force (lbf)', fontsize=12)
+        self.ax4.set_title('DART Drag Forces vs Time', fontsize=14, fontweight='bold')
         self.ax4.grid(True, alpha=0.3)
+        self.ax4.legend(fontsize=10)
         
-        self.fig1.tight_layout(pad=3.0)
+        # Update all canvases
         self.canvas1.draw()
+        self.canvas2.draw()
+        self.canvas3.draw()
+        self.canvas4.draw()
         
         self.update_results_display(results)
     
