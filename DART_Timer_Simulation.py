@@ -726,7 +726,11 @@ class DARTTimerSimulationGUI:
     
 
 
-if __name__ == "__main__":
+def run_dart_timer_simulation():
+    """Function to run DART Timer Simulation from UI"""
     root = tk.Tk()
     app = DARTTimerSimulationGUI(root)
     root.mainloop()
+
+if __name__ == "__main__":
+    run_dart_timer_simulation()

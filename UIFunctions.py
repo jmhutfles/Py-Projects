@@ -35,6 +35,9 @@ def RunTool(Tool, location, root=None):
     elif Tool == "FlysightDisplay.py":
         from FlysightDisplay import run_FlysightDisplay
         hide_and_run(run_FlysightDisplay)
+    elif Tool == "DART_Timer_Simulation.py":
+        from DART_Timer_Simulation import run_dart_timer_simulation
+        hide_and_run(run_dart_timer_simulation)
     else:
         # fallback for development
         import sys
