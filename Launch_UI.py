@@ -38,8 +38,7 @@ button_specs = [
     ("IMU Video Overlay", "IMUVideo.py"),
     ("ABT Quick View", "ABT_Quick_View.py"),
     ("IMU Quick View", "IMUQuickView.py"),
-    ("Flysight IMU Quick View", "FlysightDisplay.py"),
-    ("Ballistic Calculator DART", "DART_Timer_Simulation.py"),
+    ("Flysight Sensor Fusion", "FlysightDisplay.py"),    ("Flysight Sensor Quick View", "FlysightQuickView.py"),    ("Ballistic Calculator DART", "DART_Timer_Simulation.py"),
 ]
 
 for text, script in button_specs:

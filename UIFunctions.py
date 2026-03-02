@@ -42,6 +42,9 @@ def RunTool(Tool, location, root=None):
     elif Tool == "FlysightDisplay.py":
         from FlysightDisplay import run_FlysightDisplay
         hide_and_run(run_FlysightDisplay)
+    elif Tool == "FlysightQuickView.py":
+        from FlysightQuickView import run_flysight_sensor_quick_view
+        hide_and_run(run_flysight_sensor_quick_view)
     elif Tool == "DART_Timer_Simulation.py":
         from DART_Timer_Simulation import run_dart_timer_simulation
         hide_and_run(run_dart_timer_simulation)

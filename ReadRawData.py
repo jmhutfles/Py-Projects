@@ -90,7 +90,17 @@ def FlySightSensorRead(prompt):
 
     # Convert parsed rows to DataFrame
     NData = pd.DataFrame(parsed_rows, columns=DataHeaders)
-    NData["Time (s)"] = pd.to_numeric(NData["Time (s)"], errors="coerce")
+    
+    # Convert all numeric columns to proper numeric types
+    numeric_columns = ["Time (s)", "Pressure (Pa)", "Temperature (deg C)", 
+                      "Relative Humidity (%)", "X Mag (gauss)", "Y Mag (gauss)", 
+                      "Z Mag (gauss)", "Wx (deg/s)", "Wy (deg/s)", "Wz (deg/s)", 
+                      "Ax (g)", "Ay (g)", "Az (g)", "tow (s)", "week", "voltage (V)"]
+    
+    for col in numeric_columns:
+        if col in NData.columns:
+            NData[col] = pd.to_numeric(NData[col], errors="coerce")
+    
     NData = NData.sort_values("Time (s)").reset_index(drop=True)
 
     
