@@ -10,9 +10,16 @@ def RunTool(Tool, location, root=None):
     def hide_and_run(func):
         if root is not None:
             root.withdraw()
-        func()
-        if root is not None:
-            root.deiconify()
+        try:
+            func()
+        except Exception as e:
+            print(f"Error running tool: {e}")
+        finally:
+            # Ensure main UI is always restored
+            if root is not None:
+                root.deiconify()
+                root.lift()  # Bring window to front
+                root.focus_force()  # Force focus
 
     if Tool == "ABT_Quick_View.py":
         from ABT_Quick_View import run_abt_quick_view
@@ -48,15 +55,27 @@ def RunTool(Tool, location, root=None):
         if os.path.exists(exe_path):
             if root is not None:
                 root.withdraw()
-            subprocess.run([exe_path], cwd=base_dir)
-            if root is not None:
-                root.deiconify()
+            try:
+                subprocess.run([exe_path], cwd=base_dir)
+            except Exception as e:
+                print(f"Error running executable: {e}")
+            finally:
+                if root is not None:
+                    root.deiconify()
+                    root.lift()
+                    root.focus_force()
         else:
             if root is not None:
                 root.withdraw()
-            subprocess.run(["python", Tool], cwd=base_dir)
-            if root is not None:
-                root.deiconify()
+            try:
+                subprocess.run(["python", Tool], cwd=base_dir)
+            except Exception as e:
+                print(f"Error running tool: {e}")
+            finally:
+                if root is not None:
+                    root.deiconify()
+                    root.lift()
+                    root.focus_force()
 
 
 def clear_root_window(root):

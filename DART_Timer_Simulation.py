@@ -730,6 +730,13 @@ def run_dart_timer_simulation():
     """Function to run DART Timer Simulation from UI"""
     root = tk.Tk()
     app = DARTTimerSimulationGUI(root)
+    
+    # Ensure proper window closing behavior
+    def on_closing():
+        root.quit()
+        root.destroy()
+    
+    root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
 
 if __name__ == "__main__":
