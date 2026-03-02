@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from tkinter import messagebox
 from ReadRawData import ReadIMU
 
@@ -118,6 +119,152 @@ def plot_orientation_quick_view(result):
 	plt.show()
 
 
+def _rotation_matrix_xyz(rx_deg, ry_deg, rz_deg):
+	rx = np.deg2rad(rx_deg)
+	ry_ = np.deg2rad(ry_deg)
+	rz = np.deg2rad(rz_deg)
+
+	rx_matrix = np.array([
+		[1, 0, 0],
+		[0, np.cos(rx), -np.sin(rx)],
+		[0, np.sin(rx), np.cos(rx)],
+	])
+
+	ry_matrix = np.array([
+		[np.cos(ry_), 0, np.sin(ry_)],
+		[0, 1, 0],
+		[-np.sin(ry_), 0, np.cos(ry_)],
+	])
+
+	rz_matrix = np.array([
+		[np.cos(rz), -np.sin(rz), 0],
+		[np.sin(rz), np.cos(rz), 0],
+		[0, 0, 1],
+	])
+
+	return rz_matrix @ ry_matrix @ rx_matrix
+
+
+def animate_sensor_orientation(result, max_frames=1200):
+	"""Animate a physical-looking IMU sensor body rotating over time."""
+	time = result["Time"].to_numpy(dtype=float)
+	orientation_x = result["Orientation_X_deg"].to_numpy(dtype=float)
+	orientation_y = result["Orientation_Y_deg"].to_numpy(dtype=float)
+	orientation_z = result["Orientation_Z_deg"].to_numpy(dtype=float)
+
+	n_samples = len(result)
+	if n_samples == 0:
+		return
+
+	step = max(1, int(np.ceil(n_samples / max_frames)))
+	frame_indices = np.arange(0, n_samples, step)
+
+	fig = plt.figure(figsize=(8, 8))
+	ax = fig.add_subplot(111, projection="3d")
+	ax.set_title("IMU Sensor Body Rotation")
+
+	ax.set_xlim(-0.06, 0.06)
+	ax.set_ylim(-0.06, 0.06)
+	ax.set_zlim(-0.06, 0.06)
+	ax.set_xlabel("X")
+	ax.set_ylabel("Y")
+	ax.set_zlabel("Z")
+	ax.set_box_aspect([1, 1, 1])
+	ax.grid(True, alpha=0.25)
+
+	axis_len = 0.05
+	ax.plot([-axis_len, axis_len], [0, 0], [0, 0], color="tab:red", alpha=0.25, linewidth=1)
+	ax.plot([0, 0], [-axis_len, axis_len], [0, 0], color="tab:green", alpha=0.25, linewidth=1)
+	ax.plot([0, 0], [0, 0], [-axis_len, axis_len], color="tab:blue", alpha=0.25, linewidth=1)
+
+	half_l, half_w, half_h = 0.02, 0.012, 0.003
+	local_vertices = np.array([
+		[-half_l, -half_w, -half_h],
+		[ half_l, -half_w, -half_h],
+		[ half_l,  half_w, -half_h],
+		[-half_l,  half_w, -half_h],
+		[-half_l, -half_w,  half_h],
+		[ half_l, -half_w,  half_h],
+		[ half_l,  half_w,  half_h],
+		[-half_l,  half_w,  half_h],
+	])
+
+	faces_idx = [
+		[0, 1, 2, 3],
+		[4, 5, 6, 7],
+		[0, 1, 5, 4],
+		[1, 2, 6, 5],
+		[2, 3, 7, 6],
+		[3, 0, 4, 7],
+	]
+
+	face_colors = [
+		"#D8D8D8",
+		"#FFCC66",
+		"#C0C0C0",
+		"#A9A9A9",
+		"#B8B8B8",
+		"#B0B0B0",
+	]
+
+	front_local = np.array([half_l, 0.0, 0.0])
+	front_line, = ax.plot([0, front_local[0]], [0, front_local[1]], [0, front_local[2]], color="tab:red", linewidth=2.5, label="Sensor Front")
+	center_pt = ax.scatter([0], [0], [0], color="k", s=18)
+	text_info = ax.text2D(0.02, 0.95, "", transform=ax.transAxes)
+	ax.legend(loc="upper right")
+	sensor_poly = None
+
+	if len(time) > 1:
+		dt = np.median(np.diff(time))
+		interval_s = max(0.01, float(dt * step))
+	else:
+		interval_s = 0.05
+
+	plt.tight_layout()
+	plt.show(block=False)
+
+	for idx in frame_indices:
+		if not plt.fignum_exists(fig.number):
+			break
+
+		rot = _rotation_matrix_xyz(
+			orientation_x[idx],
+			orientation_y[idx],
+			orientation_z[idx],
+		)
+
+		rot_vertices = (rot @ local_vertices.T).T
+		face_vertices = [[rot_vertices[i] for i in face] for face in faces_idx]
+
+		if sensor_poly is not None:
+			sensor_poly.remove()
+
+		sensor_poly = Poly3DCollection(
+			face_vertices,
+			facecolors=face_colors,
+			edgecolors="k",
+			linewidths=0.8,
+			alpha=0.95,
+		)
+		ax.add_collection3d(sensor_poly)
+
+		front_vec = rot @ front_local
+		front_line.set_data_3d([0, front_vec[0]], [0, front_vec[1]], [0, front_vec[2]])
+
+		text_info.set_text(
+			f"t={time[idx]:.2f}s\n"
+			f"X={orientation_x[idx]:.1f}°\n"
+			f"Y={orientation_y[idx]:.1f}°\n"
+			f"Z={orientation_z[idx]:.1f}°"
+		)
+
+		fig.canvas.draw_idle()
+		plt.pause(interval_s)
+
+	if plt.fignum_exists(fig.number):
+		plt.show()
+
+
 def main():
 	try:
 		data, paths = load_imu_data("Select IMU Data File(s) for Orientation Quick View")
@@ -129,7 +276,19 @@ def main():
 		result = compute_orientation_and_change(data)
 
 		print(f"Loaded {len(result)} IMU samples from {len(paths)} file(s).")
-		plot_orientation_quick_view(result)
+		print("Choose view:")
+		print("1. Orientation/change plots")
+		print("2. 3D sensor body animation")
+		print("3. Both")
+		choice = input("Enter choice (1/2/3): ").strip()
+
+		if choice == "2":
+			animate_sensor_orientation(result)
+		elif choice == "3":
+			plot_orientation_quick_view(result)
+			animate_sensor_orientation(result)
+		else:
+			plot_orientation_quick_view(result)
 
 	except Exception as error:
 		messagebox.showerror("Orientation Quick View Error", str(error))
