@@ -30,11 +30,11 @@ class IMU3DVisualizer:
         try:
             data, paths = ReadIMU("Select IMU Data Files")
             if data is not None and not data.empty:
-                # Validate required columns exist
-                required_cols = ['Qw', 'Qx', 'Qy', 'Qz']
+                # Validate required columns exist - using XYZ gyroscope data
+                required_cols = ['Gx', 'Gy', 'Gz']
                 missing_cols = [col for col in required_cols if col not in data.columns]
                 if missing_cols:
-                    messagebox.showerror("Error", f"Missing required columns: {', '.join(missing_cols)}")
+                    messagebox.showerror("Error", f"Missing required XYZ gyroscope columns: {', '.join(missing_cols)}")
                     return False
                 
                 # Check data types
@@ -46,27 +46,39 @@ class IMU3DVisualizer:
                             messagebox.showerror("Error", f"Cannot convert column {col} to numeric: {str(e)}")
                             return False
                 
-                # Clean the data - remove NaN values
+                # Clean the data - fill NaN values in gyroscope columns with 0
                 initial_len = len(data)
-                data = data.dropna(subset=required_cols)
+                
+                # Fill NaN values in gyroscope columns with 0 instead of dropping rows
+                for col in required_cols:
+                    if col in data.columns:
+                        nan_count = data[col].isna().sum()
+                        if nan_count > 0:
+                            print(f"Warning: Filling {nan_count} NaN values in {col} with 0")
+                            data[col] = data[col].fillna(0.0)
+                
+                # Only drop rows if ALL gyroscope columns are NaN
+                data = data.dropna(subset=required_cols, how='all')
                 if data.empty:
-                    messagebox.showerror("Error", "No valid quaternion data found in the files")
+                    messagebox.showerror("Error", "No valid XYZ gyroscope data found in the files")
                     return False
                 
                 if len(data) < initial_len:
-                    print(f"Warning: Removed {initial_len - len(data)} rows with invalid quaternion data")
+                    print(f"Warning: Removed {initial_len - len(data)} rows where all XYZ gyroscope data was missing")
                 
-                # Validate quaternions are reasonable
-                quat_norms = np.sqrt(data['Qw']**2 + data['Qx']**2 + data['Qy']**2 + data['Qz']**2)
-                if (quat_norms < 1e-6).any():
-                    print("Warning: Some quaternions have very small magnitude and may be invalid")
+                # Validate gyroscope data is reasonable (typical range: +/- 2000 deg/s)
+                for col in required_cols:
+                    if (np.abs(data[col]) > 5000).any():
+                        print(f"Warning: Some {col} values seem unusually large (>5000 deg/s)")
                 
                 self.data = data
-                # Calculate additional metrics for parachute analysis
+                # Convert gyroscope data from milli-degrees/sec to degrees/sec  
+                self.convert_gyro_units()
+                # Calculate additional metrics using XYZ data
                 try:
-                    self.calculate_parachute_metrics()
+                    self.calculate_xyz_metrics()
                 except Exception as e:
-                    print(f"Warning: Error calculating parachute metrics: {str(e)}")
+                    print(f"Warning: Error calculating XYZ metrics: {str(e)}")
                     # Continue anyway with basic functionality
                 
                 print(f"Loaded {len(data)} data points from {len(paths)} file(s)")
@@ -86,6 +98,97 @@ class IMU3DVisualizer:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load data: {str(e)}")
             return False
+    
+    def convert_gyro_units(self):
+        """Convert gyroscope data from milli-degrees/sec to degrees/sec"""
+        # Check if gyroscope columns exist
+        if not all(col in self.data.columns for col in ['Gx', 'Gy', 'Gz']):
+            print("Warning: Gyroscope columns (Gx, Gy, Gz) not found")
+            return
+            
+        # Check typical magnitudes to determine if conversion is needed
+        sample_size = min(100, len(self.data))
+        sample_data = self.data[['Gx', 'Gy', 'Gz']].head(sample_size)
+        
+        # Calculate typical magnitudes
+        max_vals = sample_data.abs().max()
+        max_rate = max_vals.max()
+        
+        print(f"Raw gyroscope data sample ranges:")
+        print(f"  Gx: {sample_data['Gx'].min():.1f} to {sample_data['Gx'].max():.1f}")
+        print(f"  Gy: {sample_data['Gy'].min():.1f} to {sample_data['Gy'].max():.1f}")
+        print(f"  Gz: {sample_data['Gz'].min():.1f} to {sample_data['Gz'].max():.1f}")
+        print(f"Maximum magnitude: {max_rate:.1f}")
+        
+        # Convert from milli-degrees/sec to degrees/sec
+        if max_rate > 10:  # Values suggest they're in milli units
+            print("Converting from milli-degrees/sec to degrees/sec (dividing by 1000)")
+            self.data['Gx'] = self.data['Gx'] / 1000.0
+            self.data['Gy'] = self.data['Gy'] / 1000.0  
+            self.data['Gz'] = self.data['Gz'] / 1000.0
+            
+            # Show converted values
+            print(f"Converted gyroscope data ranges:")
+            print(f"  Gx: {self.data['Gx'].min():.3f} to {self.data['Gx'].max():.3f} deg/s")
+            print(f"  Gy: {self.data['Gy'].min():.3f} to {self.data['Gy'].max():.3f} deg/s")
+            print(f"  Gz: {self.data['Gz'].min():.3f} to {self.data['Gz'].max():.3f} deg/s")
+        else:
+            print("Gyroscope data appears to already be in degrees/sec, no conversion needed")
+    
+    def calculate_xyz_metrics(self):
+        """Calculate metrics using XYZ gyroscope data directly"""
+        if self.data is None:
+            raise ValueError("No data available for metric calculation")
+        
+        if len(self.data) == 0:
+            raise ValueError("Data is empty")
+        
+        # Use XYZ gyroscope data directly (now in deg/s after conversion)
+        xyz_orientations = []
+        
+        try:
+            for idx, row in self.data.iterrows():
+                # Use XYZ gyroscope data directly (angular velocities in deg/s)
+                if all(col in self.data.columns for col in ['Gx', 'Gy', 'Gz']):
+                    try:
+                        gx, gy, gz = row['Gx'], row['Gy'], row['Gz']
+                        # Convert to float to avoid array issues
+                        gx, gy, gz = float(gx), float(gy), float(gz)
+                        gyro_array = np.array([gx, gy, gz])
+                        if np.any(np.isnan(gyro_array)) or np.any(np.isinf(gyro_array)):
+                            gx, gy, gz = 0, 0, 0
+                        xyz_orientations.append([gx, gy, gz])
+                    except Exception:
+                        # Silently handle gyro errors to avoid spam
+                        xyz_orientations.append([0, 0, 0])
+                else:
+                    xyz_orientations.append([0, 0, 0])
+            
+            if not xyz_orientations:
+                raise ValueError("No valid XYZ orientation data calculated")
+            
+            xyz_orientations = np.array(xyz_orientations)
+            
+            # Validate array shape
+            if xyz_orientations.shape[1] != 3:
+                raise ValueError("Invalid array shape for XYZ orientations")
+            
+            # Store XYZ data (already available as Gx, Gy, Gz but ensure clean copies)
+            self.data['X_Rate'] = xyz_orientations[:, 0]  # Gx
+            self.data['Y_Rate'] = xyz_orientations[:, 1]  # Gy
+            self.data['Z_Rate'] = xyz_orientations[:, 2]  # Gz
+            
+            # Calculate oscillation amplitude and frequency using XYZ data
+            self.calculate_oscillation_metrics()
+            
+        except Exception as e:
+            print(f"Error in XYZ metrics calculation: {str(e)}")
+            # Initialize with zeros to prevent crashes
+            n_points = len(self.data)
+            self.data['X_Rate'] = np.zeros(n_points)
+            self.data['Y_Rate'] = np.zeros(n_points)
+            self.data['Z_Rate'] = np.zeros(n_points)
+            raise
     
     def calculate_parachute_metrics(self):
         """Calculate parachute-specific oscillation metrics"""
@@ -386,43 +489,36 @@ class IMU3DVisualizer:
         return rotated_axes.T
     
     def setup_plot(self):
-        """Setup the 3D plot with parachute-specific enhancements"""
+        """Setup the 3D plot for XYZ gyroscope rate visualization"""
         self.fig = plt.figure(figsize=(15, 10))
         
         # Main 3D plot
         self.ax = self.fig.add_subplot(221, projection='3d')
         
         # Set equal aspect ratio and limits
-        self.ax.set_xlim([-1.5, 1.5])
-        self.ax.set_ylim([-1.5, 1.5])
-        self.ax.set_zlim([-1.5, 1.5])
+        self.ax.set_xlim([-2, 2])
+        self.ax.set_ylim([-2, 2])
+        self.ax.set_zlim([-2, 2])
         
-        # Labels
-        self.ax.set_xlabel('X (Forward)')
-        self.ax.set_ylabel('Y (Right)')
-        self.ax.set_zlabel('Z (Down)')
-        self.ax.set_title('Parachute Orientation')
+        # Labels for XYZ gyroscope rates
+        self.ax.set_xlabel('X Axis (deg/s)')
+        self.ax.set_ylabel('Y Axis (deg/s)')
+        self.ax.set_zlabel('Z Axis (deg/s)')
+        self.ax.set_title('XYZ Gyroscope Angular Rates')
         
-        # Create initial axes with parachute-specific colors
-        self.x_line, = self.ax.plot([0, 1], [0, 0], [0, 0], 'r-', linewidth=4, label='Forward')
-        self.y_line, = self.ax.plot([0, 0], [0, 1], [0, 0], 'g-', linewidth=4, label='Right')
-        self.z_line, = self.ax.plot([0, 0], [0, 0], [0, 1], 'b-', linewidth=4, label='Down')
+        # Create initial axes showing XYZ rotation rates
+        self.x_line, = self.ax.plot([0, 1], [0, 0], [0, 0], 'r-', linewidth=4, label='X Rate (Roll)')
+        self.y_line, = self.ax.plot([0, 0], [0, 1], [0, 0], 'g-', linewidth=4, label='Y Rate (Pitch)')
+        self.z_line, = self.ax.plot([0, 0], [0, 0], [0, 1], 'b-', linewidth=4, label='Z Rate (Yaw)')
         
-        # Add parachute canopy representation (circle in XY plane)
-        theta = np.linspace(0, 2*np.pi, 20)
-        canopy_x = 0.8 * np.cos(theta)
-        canopy_y = 0.8 * np.sin(theta)
-        canopy_z = np.zeros_like(theta)
-        self.canopy_line, = self.ax.plot(canopy_x, canopy_y, canopy_z, 'k--', alpha=0.3, label='Canopy')
-        
-        # Add origin marker
-        self.ax.scatter([0], [0], [0], color='black', s=100)
+        # Add sensor representation at origin
+        self.ax.scatter([0], [0], [0], color='black', s=100, marker='s', label='IMU')
         
         # Add legend
         self.ax.legend()
         
-        # Add text for frame and oscillation info
-        self.frame_text = self.ax.text2D(0.02, 0.95, '', transform=self.ax.transAxes, fontsize=8)
+        # Add text for frame and XYZ rate info
+        self.frame_text = self.ax.text2D(0.02, 0.95, '', transform=self.ax.transAxes, fontsize=10)
         
         return self.fig, self.ax
     
@@ -431,86 +527,80 @@ class IMU3DVisualizer:
         try:
             if self.data is None:
                 print("Warning: No data available for frame update")
-                return self.x_line, self.y_line, self.z_line, self.canopy_line, self.frame_text
+                return self.x_line, self.y_line, self.z_line, self.frame_text
             
             if frame_num < 0 or frame_num >= len(self.data):
                 print(f"Warning: Frame {frame_num} out of range (0-{len(self.data)-1})")
-                return self.x_line, self.y_line, self.z_line, self.canopy_line, self.frame_text
+                return self.x_line, self.y_line, self.z_line, self.frame_text
             
-            # Get quaternion data for current frame
+            # Get XYZ gyroscope data for current frame
             try:
                 row = self.data.iloc[frame_num]
             except Exception as e:
                 print(f"Error accessing data at frame {frame_num}: {str(e)}")
-                return self.x_line, self.y_line, self.z_line, self.canopy_line, self.frame_text
+                return self.x_line, self.y_line, self.z_line, self.frame_text
             
-            # Validate quaternion data exists
-            required_cols = ['Qw', 'Qx', 'Qy', 'Qz']
-            missing_cols = [col for col in required_cols if col not in row or pd.isna(row[col])]
+            # Validate gyroscope data exists and handle missing values
+            required_cols = ['Gx', 'Gy', 'Gz']
+            missing_cols = [col for col in required_cols if col not in row]
             if missing_cols:
-                print(f"Warning: Missing quaternion data at frame {frame_num}: {missing_cols}")
-                return self.x_line, self.y_line, self.z_line, self.canopy_line, self.frame_text
+                print(f"Warning: Missing gyroscope columns at frame {frame_num}: {missing_cols}")
+                return self.x_line, self.y_line, self.z_line, self.frame_text
             
-            qw, qx, qy, qz = row['Qw'], row['Qx'], row['Qy'], row['Qz']
+            # Get gyroscope values, using 0 for NaN values
+            gx = row['Gx'] if not pd.isna(row['Gx']) else 0.0
+            gy = row['Gy'] if not pd.isna(row['Gy']) else 0.0
+            gz = row['Gz'] if not pd.isna(row['Gz']) else 0.0
             
-            # Convert to rotation matrix
+            # Scale gyroscope values for visualization
+            # Since values are now in deg/s, scale them appropriately for display
+            max_display_rate = 10.0  # deg/s - reasonable max for clear visualization
+            scale_factor = 1.0
+            
+            # Calculate total rotation rate to determine scaling
+            total_rate = np.sqrt(gx**2 + gy**2 + gz**2)
+            if total_rate > max_display_rate:
+                scale_factor = max_display_rate / total_rate
+            elif total_rate > 0 and total_rate < 0.1:
+                scale_factor = 10.0  # Scale up very small values
+            
+            # Apply scaling for visualization
+            gx_scaled = gx * scale_factor  
+            gy_scaled = gy * scale_factor
+            gz_scaled = gz * scale_factor
+            
+            # Update line data - showing XYZ rotation rates directly
             try:
-                R = self.quaternion_to_rotation_matrix(qw, qx, qy, qz)
-            except Exception as e:
-                print(f"Error computing rotation matrix at frame {frame_num}: {str(e)}")
-                R = np.eye(3)  # Use identity matrix as fallback
-            
-            # Get rotated axes
-            try:
-                axes = self.create_sensor_axes(R)
-            except Exception as e:
-                print(f"Error creating sensor axes at frame {frame_num}: {str(e)}")
-                # Use identity axes as fallback
-                axes = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-            
-            # Update line data with error checking
-            try:
-                self.x_line.set_data([0, axes[0, 0]], [0, axes[0, 1]])
-                self.x_line.set_3d_properties([0, axes[0, 2]])
+                # X axis shows rotation rate around X (red) - length represents magnitude
+                self.x_line.set_data([0, gx_scaled], [0, 0])
+                self.x_line.set_3d_properties([0, 0])
                 
-                self.y_line.set_data([0, axes[1, 0]], [0, axes[1, 1]])
-                self.y_line.set_3d_properties([0, axes[1, 2]])
+                # Y axis shows rotation rate around Y (green)
+                self.y_line.set_data([0, 0], [0, gy_scaled])
+                self.y_line.set_3d_properties([0, 0])
                 
-                self.z_line.set_data([0, axes[2, 0]], [0, axes[2, 1]])
-                self.z_line.set_3d_properties([0, axes[2, 2]])
+                # Z axis shows rotation rate around Z (blue)
+                self.z_line.set_data([0, 0], [0, 0])
+                self.z_line.set_3d_properties([0, gz_scaled])
             except Exception as e:
                 print(f"Error updating axis lines at frame {frame_num}: {str(e)}")
             
-            # Update canopy orientation
-            try:
-                theta = np.linspace(0, 2*np.pi, 20)
-                canopy_radius = 0.8
-                canopy_local = np.array([canopy_radius * np.cos(theta), 
-                                        canopy_radius * np.sin(theta), 
-                                        np.zeros_like(theta)])
-                canopy_rotated = R @ canopy_local
-                self.canopy_line.set_data(canopy_rotated[0], canopy_rotated[1])
-                self.canopy_line.set_3d_properties(canopy_rotated[2])
-            except Exception as e:
-                print(f"Error updating canopy at frame {frame_num}: {str(e)}")
-            
-            # Update frame info with parachute-specific data
+            # Update frame info with XYZ gyroscope data
             try:
                 time_val = row.get('Time', frame_num) if 'Time' in row else frame_num
-                roll = row.get('Roll', 0) if 'Roll' in row else 0
-                pitch = row.get('Pitch', 0) if 'Pitch' in row else 0
                 
-                # Safely calculate coning angle
+                # Calculate total rotation rate magnitude
                 try:
-                    coning = np.sqrt(roll**2 + pitch**2) if not (np.isnan(roll) or np.isnan(pitch)) else 0
+                    total_rate = np.sqrt(gx**2 + gy**2 + gz**2) if not (np.isnan(gx) or np.isnan(gy) or np.isnan(gz)) else 0
                 except:
-                    coning = 0
+                    total_rate = 0
                 
                 info_text = f'Frame: {frame_num}/{len(self.data)-1}\n'
                 info_text += f'Time: {time_val:.2f}s\n'
-                info_text += f'Roll: {roll:.1f}°\n'
-                info_text += f'Pitch: {pitch:.1f}°\n'
-                info_text += f'Coning: {coning:.1f}°'
+                info_text += f'X Rate: {gx:.2f}°/s\n'
+                info_text += f'Y Rate: {gy:.2f}°/s\n'
+                info_text += f'Z Rate: {gz:.2f}°/s\n'
+                info_text += f'Total: {total_rate:.2f}°/s'
                 
                 self.frame_text.set_text(info_text)
             except Exception as e:
@@ -519,11 +609,11 @@ class IMU3DVisualizer:
             
             self.current_frame = frame_num
             
-            return self.x_line, self.y_line, self.z_line, self.canopy_line, self.frame_text
+            return self.x_line, self.y_line, self.z_line, self.frame_text
             
         except Exception as e:
             print(f"Critical error in update_frame: {str(e)}")
-            return self.x_line, self.y_line, self.z_line, self.canopy_line, self.frame_text
+            return self.x_line, self.y_line, self.z_line, self.frame_text
     
     def parachute_analysis_dashboard(self):
         """Create comprehensive parachute analysis dashboard"""
@@ -665,26 +755,43 @@ Stability: {'EXCELLENT' if max(self.roll_rms, self.pitch_rms) < 5 else 'GOOD' if
         plt.show()
     
     def setup_3d_subplot(self, ax):
-        """Setup a 3D subplot for the dashboard"""
-        ax.set_xlim([-1.5, 1.5])
-        ax.set_ylim([-1.5, 1.5])
-        ax.set_zlim([-1.5, 1.5])
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.set_title('Current Orientation')
+        """Setup a 3D subplot for the dashboard using current XYZ data"""
+        ax.set_xlim([-2, 2])
+        ax.set_ylim([-2, 2])
+        ax.set_zlim([-2, 2])
+        ax.set_xlabel('X (deg/s)')
+        ax.set_ylabel('Y (deg/s)')
+        ax.set_zlabel('Z (deg/s)')
+        ax.set_title('Current XYZ Rates')
         
-        # Show current frame orientation
+        # Show current frame XYZ rates with proper scaling
         if self.data is not None and len(self.data) > 0:
             frame_num = min(self.current_frame, len(self.data) - 1)
             row = self.data.iloc[frame_num]
-            R = self.quaternion_to_rotation_matrix(row['Qw'], row['Qx'], row['Qy'], row['Qz'])
-            axes = self.create_sensor_axes(R)
             
-            ax.plot([0, axes[0, 0]], [0, axes[0, 1]], [0, axes[0, 2]], 'r-', linewidth=3)
-            ax.plot([0, axes[1, 0]], [0, axes[1, 1]], [0, axes[1, 2]], 'g-', linewidth=3)
-            ax.plot([0, axes[2, 0]], [0, axes[2, 1]], [0, axes[2, 2]], 'b-', linewidth=3)
+            # Get actual gyroscope values (in deg/s)
+            gx = row.get('Gx', 0)
+            gy = row.get('Gy', 0) 
+            gz = row.get('Gz', 0)
+            
+            # Scale for visualization 
+            max_display = 1.5  # Max length for display vectors
+            max_val = max(abs(gx), abs(gy), abs(gz))
+            if max_val > 0:
+                scale = min(max_display, max_display / max_val * 10)  # Scale to show direction and magnitude
+            else:
+                scale = 1.0
+            
+            gx_vis = gx * scale
+            gy_vis = gy * scale
+            gz_vis = gz * scale
+            
+            # Plot XYZ rate vectors
+            ax.plot([0, gx_vis], [0, 0], [0, 0], 'r-', linewidth=3, label=f'X: {gx:.2f}°/s')
+            ax.plot([0, 0], [0, gy_vis], [0, 0], 'g-', linewidth=3, label=f'Y: {gy:.2f}°/s')
+            ax.plot([0, 0], [0, 0], [0, gz_vis], 'b-', linewidth=3, label=f'Z: {gz:.2f}°/s')
             ax.scatter([0], [0], [0], color='black', s=50)
+            ax.legend()
 
     def animate(self):
         """Start the animation with enhanced parachute visualization"""
@@ -804,8 +911,8 @@ Stability: {'EXCELLENT' if max(self.roll_rms, self.pitch_rms) < 5 else 'GOOD' if
 
 def main():
     """Main function to run the IMU visualizer"""
-    print("Parachute Oscillation Analysis Tool")
-    print("===================================")
+    print("IMU XYZ Gyroscope Analysis Tool")
+    print("===============================")
     
     try:
         visualizer = IMU3DVisualizer()
@@ -840,10 +947,10 @@ def main():
     while True:
         try:
             print("\nSelect analysis option:")
-            print("1. Animated 3D visualization")
-            print("2. Static 3D visualization (single frame)")
-            print("3. Plot quaternion components over time")
-            print("4. Comprehensive parachute analysis dashboard")
+            print("1. Animated 3D XYZ visualization")
+            print("2. XYZ orientation rates vs time plot")
+            print("3. Static 3D visualization (single frame)")
+            print("4. Comprehensive XYZ analysis dashboard")
             print("5. Exit")
             
             choice = input("Enter choice (1-5): ").strip()
@@ -854,6 +961,11 @@ def main():
                 except Exception as e:
                     print(f"Error in animation: {str(e)}")
             elif choice == '2':
+                try:
+                    visualizer.plot_xyz_vs_time()
+                except Exception as e:
+                    print(f"Error in XYZ vs time plot: {str(e)}")
+            elif choice == '3':
                 try:
                     if visualizer.data is None or len(visualizer.data) == 0:
                         print("No data available for visualization")
@@ -870,14 +982,9 @@ def main():
                         print("Invalid frame number. Please enter an integer.")
                 except Exception as e:
                     print(f"Error in static visualization: {str(e)}")
-            elif choice == '3':
-                try:
-                    visualizer.plot_quaternion_components()
-                except Exception as e:
-                    print(f"Error in quaternion plot: {str(e)}")
             elif choice == '4':
                 try:
-                    visualizer.parachute_analysis_dashboard()
+                    visualizer.xyz_analysis_dashboard()
                 except Exception as e:
                     print(f"Error in dashboard: {str(e)}")
             elif choice == '5':
