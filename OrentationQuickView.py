@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from matplotlib.widgets import Slider
 from tkinter import messagebox
 from ReadRawData import ReadIMU
 
@@ -80,7 +81,44 @@ def compute_orientation_and_change(data):
 		}
 	)
 
+	rotation_matrices = _accumulate_rotation_matrices(work)
+	result["RotationMatrix"] = pd.Series(rotation_matrices, index=result.index, dtype=object)
+
 	return result
+
+
+def _accumulate_rotation_matrices(work):
+	"""Build cumulative rotation matrices from angular velocities (no wrapping)."""
+	gx = work["Gx"].to_numpy(dtype=float)
+	gy = work["Gy"].to_numpy(dtype=float)
+	gz = work["Gz"].to_numpy(dtype=float)
+	time = work["Time"].to_numpy(dtype=float)
+
+	dt = np.diff(time, prepend=time[0])
+	dt[0] = 0.0
+	dt = np.where(dt < 0, 0.0, dt)
+
+	rot = np.eye(3)
+	rotation_list = []
+
+	for idx in range(len(work)):
+		rotation_list.append(rot.copy())
+
+		if idx < len(gx) - 1:
+			omega = np.array([gx[idx], gy[idx], gz[idx]]) * np.pi / 180.0
+			theta = np.linalg.norm(omega)
+
+			if theta > 1e-6:
+				axis = omega / theta
+				K = np.array([
+					[0, -axis[2], axis[1]],
+					[axis[2], 0, -axis[0]],
+					[-axis[1], axis[0], 0],
+				])
+				drot = np.eye(3) + np.sin(theta * dt[idx]) * K + (1 - np.cos(theta * dt[idx])) * (K @ K)
+				rot = drot @ rot
+
+	return rotation_list
 
 
 def plot_orientation_quick_view(result):
@@ -265,6 +303,178 @@ def animate_sensor_orientation(result, max_frames=1200):
 		plt.show()
 
 
+def interactive_scrubber_view(result):
+	"""Show 2D orientation plots + 3D sensor model in one pane with time scrubber."""
+	time = result["Time"].to_numpy(dtype=float)
+	if len(time) == 0:
+		return
+
+	series_info = [
+		("Orientation_X_deg", "X Orientation (deg)", "tab:red"),
+		("Orientation_Y_deg", "Y Orientation (deg)", "tab:green"),
+		("Orientation_Z_deg", "Z Orientation (deg)", "tab:blue"),
+		("Change_X_deg_per_s", "dX/dt (deg/s)", "tab:red"),
+		("Change_Y_deg_per_s", "dY/dt (deg/s)", "tab:green"),
+		("Change_Z_deg_per_s", "dZ/dt (deg/s)", "tab:blue"),
+	]
+
+	fig = plt.figure(figsize=(18, 9))
+	gs = fig.add_gridspec(
+		2,
+		4,
+		left=0.05,
+		right=0.98,
+		top=0.93,
+		bottom=0.16,
+		wspace=0.3,
+		hspace=0.3,
+	)
+	fig.suptitle("IMU One-Pane Orientation Scrubber", fontsize=14)
+
+	plot_axes = [
+		fig.add_subplot(gs[0, 0]),
+		fig.add_subplot(gs[0, 1]),
+		fig.add_subplot(gs[0, 2]),
+		fig.add_subplot(gs[1, 0]),
+		fig.add_subplot(gs[1, 1]),
+		fig.add_subplot(gs[1, 2]),
+	]
+	ax3d = fig.add_subplot(gs[:, 3], projection="3d")
+
+	vlines = []
+	markers = []
+	series_values = []
+
+	for idx, (col, title, color) in enumerate(series_info):
+		ax = plot_axes[idx]
+		values = result[col].to_numpy(dtype=float)
+		series_values.append(values)
+
+		ax.plot(time, values, color=color, linewidth=1.2)
+		ax.set_title(title)
+		ax.set_ylabel(title)
+		if idx >= 3:
+			ax.set_xlabel("Time (s)")
+		ax.grid(True, alpha=0.3)
+
+		vline = ax.axvline(time[0], color="k", linestyle="--", linewidth=1.2, alpha=0.75)
+		marker, = ax.plot([time[0]], [values[0]], "o", color="k", markersize=5)
+		vlines.append(vline)
+		markers.append(marker)
+
+	ax3d.set_title("3D Sensor Body")
+	ax3d.set_xlim(-0.06, 0.06)
+	ax3d.set_ylim(-0.06, 0.06)
+	ax3d.set_zlim(-0.06, 0.06)
+	ax3d.set_xlabel("X")
+	ax3d.set_ylabel("Y")
+	ax3d.set_zlabel("Z")
+	ax3d.set_box_aspect([1, 1, 1])
+	ax3d.grid(True, alpha=0.25)
+
+	axis_len = 0.05
+	ax3d.plot([-axis_len, axis_len], [0, 0], [0, 0], color="tab:red", alpha=0.25, linewidth=1)
+	ax3d.plot([0, 0], [-axis_len, axis_len], [0, 0], color="tab:green", alpha=0.25, linewidth=1)
+	ax3d.plot([0, 0], [0, 0], [-axis_len, axis_len], color="tab:blue", alpha=0.25, linewidth=1)
+	ax3d.scatter([0], [0], [0], color="k", s=18)
+
+	half_l, half_w, half_h = 0.02, 0.012, 0.003
+	local_vertices = np.array([
+		[-half_l, -half_w, -half_h],
+		[half_l, -half_w, -half_h],
+		[half_l, half_w, -half_h],
+		[-half_l, half_w, -half_h],
+		[-half_l, -half_w, half_h],
+		[half_l, -half_w, half_h],
+		[half_l, half_w, half_h],
+		[-half_l, half_w, half_h],
+	])
+
+	faces_idx = [
+		[0, 1, 2, 3],
+		[4, 5, 6, 7],
+		[0, 1, 5, 4],
+		[1, 2, 6, 5],
+		[2, 3, 7, 6],
+		[3, 0, 4, 7],
+	]
+	face_colors = ["#D8D8D8", "#FFCC66", "#C0C0C0", "#A9A9A9", "#B8B8B8", "#B0B0B0"]
+
+	front_local = np.array([half_l, 0.0, 0.0])
+	front_line, = ax3d.plot(
+		[0, front_local[0]],
+		[0, front_local[1]],
+		[0, front_local[2]],
+		color="tab:red",
+		linewidth=2.5,
+		label="Sensor Front",
+	)
+	text_info = ax3d.text2D(0.02, 0.95, "", transform=ax3d.transAxes)
+	ax3d.legend(loc="upper right")
+
+	sensor_poly_ref = {"poly": None}
+
+	orientation_x = result["Orientation_X_deg"].to_numpy(dtype=float)
+	orientation_y = result["Orientation_Y_deg"].to_numpy(dtype=float)
+	orientation_z = result["Orientation_Z_deg"].to_numpy(dtype=float)
+	rotation_matrices = result["RotationMatrix"].to_numpy()
+
+	def update_at_index(index):
+		index = int(np.clip(index, 0, len(time) - 1))
+		t_now = time[index]
+
+		for j in range(6):
+			vlines[j].set_xdata([t_now, t_now])
+			markers[j].set_data([t_now], [series_values[j][index]])
+
+		rot = rotation_matrices[index]
+		rot_vertices = (rot @ local_vertices.T).T
+		face_vertices = [[rot_vertices[i] for i in face] for face in faces_idx]
+
+		if sensor_poly_ref["poly"] is not None:
+			sensor_poly_ref["poly"].remove()
+
+		sensor_poly_ref["poly"] = Poly3DCollection(
+			face_vertices,
+			facecolors=face_colors,
+			edgecolors="k",
+			linewidths=0.8,
+			alpha=0.95,
+		)
+		ax3d.add_collection3d(sensor_poly_ref["poly"])
+
+		front_vec = rot @ front_local
+		front_line.set_data_3d([0, front_vec[0]], [0, front_vec[1]], [0, front_vec[2]])
+
+		text_info.set_text(
+			f"t={t_now:.2f}s\n"
+			f"X={orientation_x[index]:.1f}°\n"
+			f"Y={orientation_y[index]:.1f}°\n"
+			f"Z={orientation_z[index]:.1f}°"
+		)
+
+		fig.canvas.draw_idle()
+
+	slider_ax = fig.add_axes([0.12, 0.07, 0.76, 0.03])
+	time_slider = Slider(
+		ax=slider_ax,
+		label="Time (s)",
+		valmin=float(time[0]),
+		valmax=float(time[-1]),
+		valinit=float(time[0]),
+	)
+
+	def on_slider_change(val):
+		idx = np.searchsorted(time, val, side="left")
+		if idx >= len(time):
+			idx = len(time) - 1
+		update_at_index(idx)
+
+	time_slider.on_changed(on_slider_change)
+	update_at_index(0)
+	plt.show()
+
+
 def main():
 	try:
 		data, paths = load_imu_data("Select IMU Data File(s) for Orientation Quick View")
@@ -278,15 +488,15 @@ def main():
 		print(f"Loaded {len(result)} IMU samples from {len(paths)} file(s).")
 		print("Choose view:")
 		print("1. Orientation/change plots")
-		print("2. 3D sensor body animation")
+		print("2. One-pane scrubber (2D + 3D + slider)")
 		print("3. Both")
 		choice = input("Enter choice (1/2/3): ").strip()
 
 		if choice == "2":
-			animate_sensor_orientation(result)
+			interactive_scrubber_view(result)
 		elif choice == "3":
 			plot_orientation_quick_view(result)
-			animate_sensor_orientation(result)
+			interactive_scrubber_view(result)
 		else:
 			plot_orientation_quick_view(result)
 
