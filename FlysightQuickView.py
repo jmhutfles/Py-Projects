@@ -138,11 +138,9 @@ def format_and_smooth_flysight_sensor_data(Data):
     altitude_msl_m = 44330 * (1 - (p_interp / 101325) ** (1 / 5.255))
 
     # --- Build DataFrame ---
-    # Convert back to absolute time
-    new_time_absolute = new_time_relative + t_min
-    
+    # Keep time starting at 0
     DataUnits = pd.DataFrame({
-        "Time (s)": new_time_absolute,
+        "Time (s)": new_time_relative,  # Already starts at 0
         "Ax (g)": ax_interp,
         "Ay (g)": ay_interp,
         "Az (g)": az_interp,
@@ -248,6 +246,10 @@ def run_flysight_sensor_quick_view():
             margin = (acc_max - acc_min) * 0.1 + 0.1  # Add 10% margin plus 0.1g
             ax2.set_ylim(max(0, acc_min - margin), acc_max + margin)
 
+            # Add grid lines
+            ax1.grid(True, alpha=0.3)
+            ax2.grid(True, alpha=0.3)
+
             plt.title(file_name_display + f" (Acc: {DataUnits['Smoothed Acceleration (g)'].mean():.2f}g avg)")
             fig.tight_layout()
 
@@ -284,6 +286,10 @@ def run_flysight_sensor_quick_view():
 
             plt.title(file_name_display)
             fig.tight_layout()
+
+            # Add grid lines
+            ax1.grid(True, alpha=0.3)
+            ax2.grid(True, alpha=0.3)
 
             # Interactive annotations for both lines
             cursor = mplcursors.cursor([line1, line2], hover=False, multiple=True)

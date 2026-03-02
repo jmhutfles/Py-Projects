@@ -89,7 +89,7 @@ def format_and_smooth_abt_data(Data):
 
     # --- Build DataFrame ---
     DataUnits = pd.DataFrame({
-        "Time (s)": new_time,
+        "Time (s)": new_time - t_min,  # Start at 0 seconds
         "Ax": ax_interp,
         "Ay": ay_interp,
         "Az": az_interp,
@@ -178,7 +178,7 @@ def format_and_smooth_imu_data(Data):
 
     # --- Build DataFrame ---
     DataUnits = pd.DataFrame({
-        "Time (s)": new_time,
+        "Time (s)": new_time - t_min,  # Start at 0 seconds
         "Ax": ax_interp,
         "Ay": ay_interp,
         "Az": az_interp,

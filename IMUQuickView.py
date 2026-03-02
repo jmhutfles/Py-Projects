@@ -50,6 +50,10 @@ def IMUQuickView():
             # Add a constant 1G dashed line on the acceleration axis
             ax2.axhline(y=1, color='gray', linestyle='--', linewidth=3, label='1G Reference')
 
+            # Add grid lines
+            ax1.grid(True, alpha=0.3)
+            ax2.grid(True, alpha=0.3)
+
             plt.title(file_name)
             fig.tight_layout()
 
@@ -82,6 +86,10 @@ def IMUQuickView():
             line2, = ax2.plot(DataUnits["Time (s)"], DataUnits["rate_of_descent_ftps"], color='r', label="ROD (ft/s)")
             ax2.set_ylabel("Rate of Descent (ft/s)", color='r')
             ax2.tick_params(axis='y', labelcolor='r')
+
+            # Add grid lines
+            ax1.grid(True, alpha=0.3)
+            ax2.grid(True, alpha=0.3)
 
             plt.title(file_name)
             fig.tight_layout()
