@@ -80,7 +80,9 @@ class DARTTimerSimulationGUI:
         for i, (param, label, unit) in enumerate(vehicle_params):
             ttk.Label(vehicle_frame, text=f"{label}:").grid(row=i, column=0, sticky='w', pady=2)
             
-            var = tk.DoubleVar(value=self.params[param])
+            # Ensure parameter exists in self.params
+            default_value = self.params.get(param, 0.0)
+            var = tk.DoubleVar(master=self.root, value=default_value)
             entry = ttk.Entry(vehicle_frame, textvariable=var, width=12)
             entry.grid(row=i, column=1, sticky='ew', pady=2, padx=(10, 5))
             self.param_vars[param] = var
@@ -100,7 +102,8 @@ class DARTTimerSimulationGUI:
         for i, (param, label, unit) in enumerate(aircraft_params):
             ttk.Label(aircraft_frame, text=f"{label}:").grid(row=i, column=0, sticky='w', pady=2)
             
-            var = tk.DoubleVar(value=self.params[param])
+            default_value = self.params.get(param, 0.0)
+            var = tk.DoubleVar(master=self.root, value=default_value)
             entry = ttk.Entry(aircraft_frame, textvariable=var, width=12)
             entry.grid(row=i, column=1, sticky='ew', pady=2, padx=(10, 5))
             self.param_vars[param] = var
@@ -122,7 +125,8 @@ class DARTTimerSimulationGUI:
         for i, (param, label, unit) in enumerate(test_params):
             ttk.Label(test_frame, text=f"{label}:").grid(row=i, column=0, sticky='w', pady=2)
             
-            var = tk.DoubleVar(value=self.params[param])
+            default_value = self.params.get(param, 0.0)
+            var = tk.DoubleVar(master=self.root, value=default_value)
             entry = ttk.Entry(test_frame, textvariable=var, width=12)
             entry.grid(row=i, column=1, sticky='ew', pady=2, padx=(10, 5))
             self.param_vars[param] = var
@@ -144,7 +148,7 @@ class DARTTimerSimulationGUI:
         self.progress_frame.pack(fill=tk.X, pady=10)
         
         ttk.Label(self.progress_frame, text="Calculation Progress:").pack()
-        self.progress_var = tk.DoubleVar()
+        self.progress_var = tk.DoubleVar(master=self.root)
         self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_var, 
                                           maximum=100, length=300)
         self.progress_bar.pack(fill=tk.X, pady=5)
@@ -528,17 +532,35 @@ class DARTTimerSimulationGUI:
                     results = self.simulate_dart_descent(params)
                     self.root.after(0, lambda: self.simulation_complete(results))
                 except Exception as sim_error:
+                    import traceback
+                    traceback.print_exc()  # Keep error tracing for debugging
                     self.root.after(0, lambda: self.simulation_error(str(sim_error)))
             
             threading.Thread(target=simulate, daemon=True).start()
             
         except Exception as e:
+            import traceback
+            traceback.print_exc()  # Keep error tracing for debugging
             messagebox.showerror("Simulation Error", f"Simulation failed: {str(e)}")
             self.reset_progress_bar()
     
     def simulation_complete(self, results):
         """Called when simulation completes successfully"""
-        self.update_display(results)
+        try:
+            self.update_display(results)
+            # Flash the progress bar to indicate completion
+            self.progress_var.set(100)
+            self.root.update_idletasks()
+            
+            # Ensure window is visible and focused after completion
+            self.root.lift()
+            self.root.focus_force()
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()  # Keep error tracing for debugging
+            messagebox.showerror("Display Error", f"Error updating display: {str(e)}")
+        
         self.reset_progress_bar()
         self.progress_label.config(text="Calculation complete!")
     
@@ -643,6 +665,11 @@ class DARTTimerSimulationGUI:
         self.canvas3.draw()
         self.canvas4.draw()
         
+        # Force GUI update and ensure window visibility
+        self.root.lift()
+        self.root.update_idletasks()
+        self.root.update()
+        
         self.update_results_display(results)
     
     def update_results_display(self, results):
@@ -726,18 +753,40 @@ class DARTTimerSimulationGUI:
     
 
 
-def run_dart_timer_simulation():
+def run_dart_timer_simulation(parent_root=None):
     """Function to run DART Timer Simulation from UI"""
-    root = tk.Tk()
+    if parent_root is not None:
+        # If launched from another UI, create a Toplevel window
+        root = tk.Toplevel(parent_root)
+        root.transient(parent_root)  # Make it a child of parent
+        root.grab_set()  # Make it modal
+    else:
+        # If launched standalone, create a new Tk instance
+        root = tk.Tk()
+    
+    # Ensure the window comes to the front and stays visible
+    root.lift()
+    root.attributes('-topmost', True)
+    root.after_idle(lambda: root.attributes('-topmost', False))
+    
     app = DARTTimerSimulationGUI(root)
     
     # Ensure proper window closing behavior
     def on_closing():
-        root.quit()
-        root.destroy()
+        if parent_root is not None:
+            root.grab_release()  # Release modal grab
+            root.destroy()
+        else:
+            root.quit()
+            root.destroy()
     
     root.protocol("WM_DELETE_WINDOW", on_closing)
-    root.mainloop()
+    
+    if parent_root is not None:
+        # Don't call mainloop for Toplevel - let parent handle it
+        root.wait_window()  # Wait for window to be destroyed
+    else:
+        root.mainloop()
 
 if __name__ == "__main__":
     run_dart_timer_simulation()

@@ -47,7 +47,18 @@ def RunTool(Tool, location, root=None):
         hide_and_run(run_flysight_sensor_quick_view)
     elif Tool == "DART_Timer_Simulation.py":
         from DART_Timer_Simulation import run_dart_timer_simulation
-        hide_and_run(run_dart_timer_simulation)
+        if root is not None:
+            root.withdraw()
+        try:
+            run_dart_timer_simulation(parent_root=root)
+        except Exception as e:
+            print(f"Error running tool: {e}")
+        finally:
+            # Ensure main UI is always restored
+            if root is not None:
+                root.deiconify()
+                root.lift()  # Bring window to front
+                root.focus_force()  # Force focus
     else:
         # fallback for development
         import sys
