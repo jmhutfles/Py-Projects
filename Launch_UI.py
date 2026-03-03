@@ -6,6 +6,7 @@ import subprocess
 from PIL import Image, ImageTk
 from UIFunctions import RunTool
 from UIFunctions import ConversionsWindow
+from UIFunctions import get_resource_base_dir
 
 
 
@@ -15,10 +16,7 @@ root.configure(bg='black')
 root.title("Choose a Tool")
 
 # Add Background Image
-if getattr(sys, 'frozen', False):
-    base_dir = sys._MEIPASS
-else:
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = get_resource_base_dir()
 
 BackgroundImagePath = os.path.join(base_dir, "Pictures", "Test Session Pictures.jpg")
 BackgroundImage = Image.open(BackgroundImagePath)

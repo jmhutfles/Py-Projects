@@ -6,6 +6,12 @@ import os
 from Conversions import FeetToMeters
 import sys
 
+
+def get_resource_base_dir():
+    if getattr(sys, 'frozen', False):
+        return getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
 def RunTool(Tool, location, root=None):
     def hide_and_run(func):
         if root is not None:
@@ -59,6 +65,9 @@ def RunTool(Tool, location, root=None):
                 root.deiconify()
                 root.lift()  # Bring window to front
                 root.focus_force()  # Force focus
+    elif Tool == "OrentationQuickView.py":
+        from OrentationQuickView import main as run_orientation_cone_viewer
+        hide_and_run(run_orientation_cone_viewer)
     else:
         # fallback for development
         import sys
@@ -96,11 +105,7 @@ def clear_root_window(root):
     for widget in root.winfo_children():
         widget.destroy()
     
-    # Get the directory where the .exe or script is located
-    if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = get_resource_base_dir()
 
     BackgroundImagePath = os.path.join(base_dir, "Pictures", "Test Session Pictures.jpg")
     BackgroundImage = Image.open(BackgroundImagePath)

@@ -1,8 +1,6 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from matplotlib.widgets import Slider
 from tkinter import messagebox
 from ReadRawData import ReadIMU
 
@@ -92,6 +90,10 @@ def compute_orientation_and_change(data):
 	turns_x = orientation_x / 360.0
 	turns_y = orientation_y / 360.0
 	turns_z = orientation_z / 360.0
+	eps = 1e-9
+	turns_count_x = np.where(turns_x >= 0, np.floor(turns_x + eps), np.ceil(turns_x - eps))
+	turns_count_y = np.where(turns_y >= 0, np.floor(turns_y + eps), np.ceil(turns_y - eps))
+	turns_count_z = np.where(turns_z >= 0, np.floor(turns_z + eps), np.ceil(turns_z - eps))
 	abs_turns_x = abs_orientation_x / 360.0
 	abs_turns_y = abs_orientation_y / 360.0
 	abs_turns_z = abs_orientation_z / 360.0
@@ -118,6 +120,9 @@ def compute_orientation_and_change(data):
 			"Turns_X": turns_x,
 			"Turns_Y": turns_y,
 			"Turns_Z": turns_z,
+			"TurnsCount_X": turns_count_x,
+			"TurnsCount_Y": turns_count_y,
+			"TurnsCount_Z": turns_count_z,
 			"AbsTurns_X": abs_turns_x,
 			"AbsTurns_Y": abs_turns_y,
 			"AbsTurns_Z": abs_turns_z,
@@ -131,7 +136,6 @@ def compute_orientation_and_change(data):
 	)
 
 	rotation_matrices = _accumulate_rotation_matrices(work)
-	result["RotationMatrix"] = pd.Series(rotation_matrices, index=result.index, dtype=object)
 	z_align = np.array([rot[2, 2] for rot in rotation_matrices], dtype=float)
 	z_align = np.clip(z_align, -1.0, 1.0)
 	result["ConeAngle_deg"] = np.degrees(np.arccos(z_align))
@@ -187,9 +191,9 @@ def plot_orientation_quick_view(result):
 	fig.suptitle("IMU Orientation Quick View", fontsize=14)
 
 	top_plots = [
-		("Orientation_X_deg", "Turns_X", "X Orientation (deg)", "tab:red"),
-		("Orientation_Y_deg", "Turns_Y", "Y Orientation (deg)", "tab:green"),
-		("Orientation_Z_deg", "Turns_Z", "Z Orientation (deg)", "tab:blue"),
+		("Orientation_X_deg", "AbsTurns_X", "X Orientation (deg)", "tab:red"),
+		("Orientation_Y_deg", "AbsTurns_Y", "Y Orientation (deg)", "tab:green"),
+		("Orientation_Z_deg", "AbsTurns_Z", "Z Orientation (deg)", "tab:blue"),
 	]
 
 	bottom_plots = [
@@ -198,7 +202,7 @@ def plot_orientation_quick_view(result):
 		("Change_Z_deg_per_s", "dZ/dt (deg/s)", "tab:blue"),
 	]
 
-	for idx, (column, turns_column, ylabel, color) in enumerate(top_plots):
+	for idx, (column, total_turns_column, ylabel, color) in enumerate(top_plots):
 		ax = axes[idx]
 		ax.plot(time, result[column], color=color, linewidth=1.2)
 		ax.set_title(ylabel)
@@ -208,12 +212,12 @@ def plot_orientation_quick_view(result):
 		turns_ax = ax.twinx()
 		net_turns_line, = turns_ax.plot(
 			time,
-			result[turns_column],
+			result[total_turns_column],
 			color="tab:purple",
-			linestyle="--",
-			linewidth=1.0,
-			alpha=0.8,
-			label="Net Turns",
+			linestyle=":",
+			linewidth=1.4,
+			alpha=0.95,
+			label="Total Turns",
 		)
 		turns_ax.set_ylabel("Turns", color="tab:purple")
 		turns_ax.tick_params(axis="y", colors="tab:purple")
@@ -239,357 +243,6 @@ def plot_orientation_quick_view(result):
 	axes[8].axis("off")
 
 	plt.tight_layout()
-	plt.show()
-
-
-def _rotation_matrix_xyz(rx_deg, ry_deg, rz_deg):
-	rx = np.deg2rad(rx_deg)
-	ry_ = np.deg2rad(ry_deg)
-	rz = np.deg2rad(rz_deg)
-
-	rx_matrix = np.array([
-		[1, 0, 0],
-		[0, np.cos(rx), -np.sin(rx)],
-		[0, np.sin(rx), np.cos(rx)],
-	])
-
-	ry_matrix = np.array([
-		[np.cos(ry_), 0, np.sin(ry_)],
-		[0, 1, 0],
-		[-np.sin(ry_), 0, np.cos(ry_)],
-	])
-
-	rz_matrix = np.array([
-		[np.cos(rz), -np.sin(rz), 0],
-		[np.sin(rz), np.cos(rz), 0],
-		[0, 0, 1],
-	])
-
-	return rz_matrix @ ry_matrix @ rx_matrix
-
-
-def animate_sensor_orientation(result, max_frames=1200):
-	"""Animate a physical-looking IMU sensor body rotating over time."""
-	time = result["Time"].to_numpy(dtype=float)
-	orientation_x = result["Orientation_X_deg"].to_numpy(dtype=float)
-	orientation_y = result["Orientation_Y_deg"].to_numpy(dtype=float)
-	orientation_z = result["Orientation_Z_deg"].to_numpy(dtype=float)
-	rotation_matrices = result["RotationMatrix"].to_numpy()
-
-	n_samples = len(result)
-	if n_samples == 0:
-		return
-
-	step = max(1, int(np.ceil(n_samples / max_frames)))
-	frame_indices = np.arange(0, n_samples, step)
-
-	fig = plt.figure(figsize=(8, 8))
-	ax = fig.add_subplot(111, projection="3d")
-	ax.set_title("IMU Sensor Body Rotation")
-
-	ax.set_xlim(-0.06, 0.06)
-	ax.set_ylim(-0.06, 0.06)
-	ax.set_zlim(-0.06, 0.06)
-	ax.set_xlabel("X")
-	ax.set_ylabel("Y")
-	ax.set_zlabel("Z")
-	ax.set_box_aspect([1, 1, 1])
-	ax.grid(True, alpha=0.25)
-
-	axis_len = 0.05
-	ax.plot([-axis_len, axis_len], [0, 0], [0, 0], color="tab:red", alpha=0.25, linewidth=1)
-	ax.plot([0, 0], [-axis_len, axis_len], [0, 0], color="tab:green", alpha=0.25, linewidth=1)
-	ax.plot([0, 0], [0, 0], [-axis_len, axis_len], color="tab:blue", alpha=0.25, linewidth=1)
-
-	half_l, half_w, half_h = 0.02, 0.012, 0.003
-	local_vertices = np.array([
-		[-half_l, -half_w, -half_h],
-		[ half_l, -half_w, -half_h],
-		[ half_l,  half_w, -half_h],
-		[-half_l,  half_w, -half_h],
-		[-half_l, -half_w,  half_h],
-		[ half_l, -half_w,  half_h],
-		[ half_l,  half_w,  half_h],
-		[-half_l,  half_w,  half_h],
-	])
-
-	faces_idx = [
-		[0, 1, 2, 3],
-		[4, 5, 6, 7],
-		[0, 1, 5, 4],
-		[1, 2, 6, 5],
-		[2, 3, 7, 6],
-		[3, 0, 4, 7],
-	]
-
-	face_colors = [
-		"#D8D8D8",
-		"#FFCC66",
-		"#C0C0C0",
-		"#A9A9A9",
-		"#B8B8B8",
-		"#B0B0B0",
-	]
-
-	front_local = np.array([half_l, 0.0, 0.0])
-	front_line, = ax.plot([0, front_local[0]], [0, front_local[1]], [0, front_local[2]], color="tab:red", linewidth=2.5, label="Sensor Front")
-	center_pt = ax.scatter([0], [0], [0], color="k", s=18)
-	text_info = ax.text2D(0.02, 0.95, "", transform=ax.transAxes)
-	ax.legend(loc="upper right")
-	sensor_poly = None
-
-	if len(time) > 1:
-		dt = np.median(np.diff(time))
-		interval_s = max(0.01, float(dt * step))
-	else:
-		interval_s = 0.05
-
-	plt.tight_layout()
-	plt.show(block=False)
-
-	for idx in frame_indices:
-		if not plt.fignum_exists(fig.number):
-			break
-
-		rot = rotation_matrices[idx]
-
-		rot_vertices = (rot @ local_vertices.T).T
-		face_vertices = [[rot_vertices[i] for i in face] for face in faces_idx]
-
-		if sensor_poly is not None:
-			sensor_poly.remove()
-
-		sensor_poly = Poly3DCollection(
-			face_vertices,
-			facecolors=face_colors,
-			edgecolors="k",
-			linewidths=0.8,
-			alpha=0.95,
-		)
-		ax.add_collection3d(sensor_poly)
-
-		front_vec = rot @ front_local
-		front_line.set_data_3d([0, front_vec[0]], [0, front_vec[1]], [0, front_vec[2]])
-
-		text_info.set_text(
-			f"t={time[idx]:.2f}s\n"
-			f"X={orientation_x[idx]:.1f}°\n"
-			f"Y={orientation_y[idx]:.1f}°\n"
-			f"Z={orientation_z[idx]:.1f}°"
-		)
-
-		fig.canvas.draw_idle()
-		plt.pause(interval_s)
-
-	if plt.fignum_exists(fig.number):
-		plt.show()
-
-
-def interactive_scrubber_view(result):
-	"""Show 2D orientation plots + 3D sensor model in one pane with time scrubber."""
-	time = result["Time"].to_numpy(dtype=float)
-	if len(time) == 0:
-		return
-
-	series_info = [
-		("Orientation_X_deg", "X Orientation (deg)", "tab:red"),
-		("Orientation_Y_deg", "Y Orientation (deg)", "tab:green"),
-		("Orientation_Z_deg", "Z Orientation (deg)", "tab:blue"),
-		("Change_X_deg_per_s", "dX/dt (deg/s)", "tab:red"),
-		("Change_Y_deg_per_s", "dY/dt (deg/s)", "tab:green"),
-		("Change_Z_deg_per_s", "dZ/dt (deg/s)", "tab:blue"),
-	]
-
-	fig = plt.figure(figsize=(18, 9))
-	gs = fig.add_gridspec(
-		2,
-		4,
-		left=0.05,
-		right=0.98,
-		top=0.93,
-		bottom=0.16,
-		wspace=0.3,
-		hspace=0.3,
-	)
-	fig.suptitle("IMU One-Pane Orientation Scrubber", fontsize=14)
-
-	plot_axes = [
-		fig.add_subplot(gs[0, 0]),
-		fig.add_subplot(gs[0, 1]),
-		fig.add_subplot(gs[0, 2]),
-		fig.add_subplot(gs[1, 0]),
-		fig.add_subplot(gs[1, 1]),
-		fig.add_subplot(gs[1, 2]),
-	]
-	ax3d = fig.add_subplot(gs[:, 3], projection="3d")
-
-	vlines = []
-	markers = []
-	series_values = []
-
-	for idx, (col, title, color) in enumerate(series_info):
-		ax = plot_axes[idx]
-		values = result[col].to_numpy(dtype=float)
-		series_values.append(values)
-
-		ax.plot(time, values, color=color, linewidth=1.2)
-		ax.set_title(title)
-		ax.set_ylabel(title)
-		if idx >= 3:
-			ax.set_xlabel("Time (s)")
-		ax.grid(True, alpha=0.3)
-
-		vline = ax.axvline(time[0], color="k", linestyle="--", linewidth=1.2, alpha=0.75)
-		marker, = ax.plot([time[0]], [values[0]], "o", color="k", markersize=5)
-		vlines.append(vline)
-		markers.append(marker)
-
-		if idx < 3:
-			turn_col = ["Turns_X", "Turns_Y", "Turns_Z"][idx]
-			abs_turn_col = ["AbsTurns_X", "AbsTurns_Y", "AbsTurns_Z"][idx]
-			turns_values = result[turn_col].to_numpy(dtype=float)
-			abs_turns_values = result[abs_turn_col].to_numpy(dtype=float)
-			turns_ax = ax.twinx()
-			turns_ax.plot(
-				time,
-				turns_values,
-				color="tab:purple",
-				linestyle="--",
-				linewidth=1.0,
-				alpha=0.8,
-				label="Net Turns",
-			)
-			turns_ax.plot(
-				time,
-				abs_turns_values,
-				color="tab:orange",
-				linestyle=":",
-				linewidth=1.1,
-				alpha=0.9,
-				label="Abs Turns",
-			)
-			turns_ax.set_ylabel("Turns", color="tab:purple")
-			turns_ax.tick_params(axis="y", colors="tab:purple")
-			turns_ax.legend(loc="upper right", fontsize=8)
-
-	ax3d.set_title("3D Sensor Body")
-	ax3d.set_xlim(-0.06, 0.06)
-	ax3d.set_ylim(-0.06, 0.06)
-	ax3d.set_zlim(-0.06, 0.06)
-	ax3d.set_xlabel("X")
-	ax3d.set_ylabel("Y")
-	ax3d.set_zlabel("Z")
-	ax3d.set_box_aspect([1, 1, 1])
-	ax3d.grid(True, alpha=0.25)
-
-	axis_len = 0.05
-	ax3d.plot([-axis_len, axis_len], [0, 0], [0, 0], color="tab:red", alpha=0.25, linewidth=1)
-	ax3d.plot([0, 0], [-axis_len, axis_len], [0, 0], color="tab:green", alpha=0.25, linewidth=1)
-	ax3d.plot([0, 0], [0, 0], [-axis_len, axis_len], color="tab:blue", alpha=0.25, linewidth=1)
-	ax3d.scatter([0], [0], [0], color="k", s=18)
-
-	half_l, half_w, half_h = 0.02, 0.012, 0.003
-	local_vertices = np.array([
-		[-half_l, -half_w, -half_h],
-		[half_l, -half_w, -half_h],
-		[half_l, half_w, -half_h],
-		[-half_l, half_w, -half_h],
-		[-half_l, -half_w, half_h],
-		[half_l, -half_w, half_h],
-		[half_l, half_w, half_h],
-		[-half_l, half_w, half_h],
-	])
-
-	faces_idx = [
-		[0, 1, 2, 3],
-		[4, 5, 6, 7],
-		[0, 1, 5, 4],
-		[1, 2, 6, 5],
-		[2, 3, 7, 6],
-		[3, 0, 4, 7],
-	]
-	face_colors = ["#D8D8D8", "#FFCC66", "#C0C0C0", "#A9A9A9", "#B8B8B8", "#B0B0B0"]
-
-	front_local = np.array([half_l, 0.0, 0.0])
-	front_line, = ax3d.plot(
-		[0, front_local[0]],
-		[0, front_local[1]],
-		[0, front_local[2]],
-		color="tab:red",
-		linewidth=2.5,
-		label="Sensor Front",
-	)
-	text_info = ax3d.text2D(0.02, 0.95, "", transform=ax3d.transAxes)
-	ax3d.legend(loc="upper right")
-
-	sensor_poly_ref = {"poly": None}
-
-	orientation_x = result["Orientation_X_deg"].to_numpy(dtype=float)
-	orientation_y = result["Orientation_Y_deg"].to_numpy(dtype=float)
-	orientation_z = result["Orientation_Z_deg"].to_numpy(dtype=float)
-	turns_x = result["Turns_X"].to_numpy(dtype=float)
-	turns_y = result["Turns_Y"].to_numpy(dtype=float)
-	turns_z = result["Turns_Z"].to_numpy(dtype=float)
-	abs_turns_x = result["AbsTurns_X"].to_numpy(dtype=float)
-	abs_turns_y = result["AbsTurns_Y"].to_numpy(dtype=float)
-	abs_turns_z = result["AbsTurns_Z"].to_numpy(dtype=float)
-	rotation_matrices = result["RotationMatrix"].to_numpy()
-
-	def update_at_index(index):
-		index = int(np.clip(index, 0, len(time) - 1))
-		t_now = time[index]
-
-		for j in range(6):
-			vlines[j].set_xdata([t_now, t_now])
-			markers[j].set_data([t_now], [series_values[j][index]])
-
-		rot = rotation_matrices[index]
-		rot_vertices = (rot @ local_vertices.T).T
-		face_vertices = [[rot_vertices[i] for i in face] for face in faces_idx]
-
-		if sensor_poly_ref["poly"] is not None:
-			sensor_poly_ref["poly"].remove()
-
-		sensor_poly_ref["poly"] = Poly3DCollection(
-			face_vertices,
-			facecolors=face_colors,
-			edgecolors="k",
-			linewidths=0.8,
-			alpha=0.95,
-		)
-		ax3d.add_collection3d(sensor_poly_ref["poly"])
-
-		front_vec = rot @ front_local
-		front_line.set_data_3d([0, front_vec[0]], [0, front_vec[1]], [0, front_vec[2]])
-
-		text_info.set_text(
-			f"t={t_now:.2f}s\n"
-			f"X={orientation_x[index]:.1f}°\n"
-			f"Y={orientation_y[index]:.1f}°\n"
-			f"Z={orientation_z[index]:.1f}°\n"
-			f"Tn: X={turns_x[index]:.2f} Y={turns_y[index]:.2f} Z={turns_z[index]:.2f}\n"
-			f"Ta: X={abs_turns_x[index]:.2f} Y={abs_turns_y[index]:.2f} Z={abs_turns_z[index]:.2f}"
-		)
-
-		fig.canvas.draw_idle()
-
-	slider_ax = fig.add_axes([0.12, 0.07, 0.76, 0.03])
-	time_slider = Slider(
-		ax=slider_ax,
-		label="Time (s)",
-		valmin=float(time[0]),
-		valmax=float(time[-1]),
-		valinit=float(time[0]),
-	)
-
-	def on_slider_change(val):
-		idx = np.searchsorted(time, val, side="left")
-		if idx >= len(time):
-			idx = len(time) - 1
-		update_at_index(idx)
-
-	time_slider.on_changed(on_slider_change)
-	update_at_index(0)
 	plt.show()
 
 
