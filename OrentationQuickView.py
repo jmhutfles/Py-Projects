@@ -58,6 +58,16 @@ def compute_orientation_and_change(data):
 	orientation_x = np.cumsum(gx * dt)
 	orientation_y = np.cumsum(gy * dt)
 	orientation_z = np.cumsum(gz * dt)
+	abs_orientation_x = np.cumsum(np.abs(gx) * dt)
+	abs_orientation_y = np.cumsum(np.abs(gy) * dt)
+	abs_orientation_z = np.cumsum(np.abs(gz) * dt)
+
+	turns_x = orientation_x / 360.0
+	turns_y = orientation_y / 360.0
+	turns_z = orientation_z / 360.0
+	abs_turns_x = abs_orientation_x / 360.0
+	abs_turns_y = abs_orientation_y / 360.0
+	abs_turns_z = abs_orientation_z / 360.0
 
 	unique_times = np.unique(time)
 	if unique_times.size > 1:
@@ -75,6 +85,12 @@ def compute_orientation_and_change(data):
 			"Orientation_X_deg": orientation_x,
 			"Orientation_Y_deg": orientation_y,
 			"Orientation_Z_deg": orientation_z,
+			"Turns_X": turns_x,
+			"Turns_Y": turns_y,
+			"Turns_Z": turns_z,
+			"AbsTurns_X": abs_turns_x,
+			"AbsTurns_Y": abs_turns_y,
+			"AbsTurns_Z": abs_turns_z,
 			"Change_X_deg_per_s": change_x,
 			"Change_Y_deg_per_s": change_y,
 			"Change_Z_deg_per_s": change_z,
@@ -129,9 +145,9 @@ def plot_orientation_quick_view(result):
 	fig.suptitle("IMU Orientation Quick View", fontsize=14)
 
 	top_plots = [
-		("Orientation_X_deg", "X Orientation (deg)", "tab:red"),
-		("Orientation_Y_deg", "Y Orientation (deg)", "tab:green"),
-		("Orientation_Z_deg", "Z Orientation (deg)", "tab:blue"),
+		("Orientation_X_deg", "Turns_X", "AbsTurns_X", "X Orientation (deg)", "tab:red"),
+		("Orientation_Y_deg", "Turns_Y", "AbsTurns_Y", "Y Orientation (deg)", "tab:green"),
+		("Orientation_Z_deg", "Turns_Z", "AbsTurns_Z", "Z Orientation (deg)", "tab:blue"),
 	]
 
 	bottom_plots = [
@@ -140,11 +156,34 @@ def plot_orientation_quick_view(result):
 		("Change_Z_deg_per_s", "dZ/dt (deg/s)", "tab:blue"),
 	]
 
-	for idx, (column, ylabel, color) in enumerate(top_plots):
+	for idx, (column, turns_column, abs_turns_column, ylabel, color) in enumerate(top_plots):
 		axes[0, idx].plot(time, result[column], color=color, linewidth=1.2)
 		axes[0, idx].set_title(ylabel)
 		axes[0, idx].set_ylabel(ylabel)
 		axes[0, idx].grid(True, alpha=0.3)
+
+		turns_ax = axes[0, idx].twinx()
+		net_turns_line, = turns_ax.plot(
+			time,
+			result[turns_column],
+			color="tab:purple",
+			linestyle="--",
+			linewidth=1.0,
+			alpha=0.8,
+			label="Net Turns",
+		)
+		abs_turns_line, = turns_ax.plot(
+			time,
+			result[abs_turns_column],
+			color="tab:orange",
+			linestyle=":",
+			linewidth=1.1,
+			alpha=0.9,
+			label="Abs Turns",
+		)
+		turns_ax.set_ylabel("Turns", color="tab:purple")
+		turns_ax.tick_params(axis="y", colors="tab:purple")
+		turns_ax.legend(handles=[net_turns_line, abs_turns_line], loc="upper right", fontsize=8)
 
 	for idx, (column, ylabel, color) in enumerate(bottom_plots):
 		axes[1, idx].plot(time, result[column], color=color, linewidth=1.2)
@@ -362,6 +401,34 @@ def interactive_scrubber_view(result):
 		vlines.append(vline)
 		markers.append(marker)
 
+		if idx < 3:
+			turn_col = ["Turns_X", "Turns_Y", "Turns_Z"][idx]
+			abs_turn_col = ["AbsTurns_X", "AbsTurns_Y", "AbsTurns_Z"][idx]
+			turns_values = result[turn_col].to_numpy(dtype=float)
+			abs_turns_values = result[abs_turn_col].to_numpy(dtype=float)
+			turns_ax = ax.twinx()
+			turns_ax.plot(
+				time,
+				turns_values,
+				color="tab:purple",
+				linestyle="--",
+				linewidth=1.0,
+				alpha=0.8,
+				label="Net Turns",
+			)
+			turns_ax.plot(
+				time,
+				abs_turns_values,
+				color="tab:orange",
+				linestyle=":",
+				linewidth=1.1,
+				alpha=0.9,
+				label="Abs Turns",
+			)
+			turns_ax.set_ylabel("Turns", color="tab:purple")
+			turns_ax.tick_params(axis="y", colors="tab:purple")
+			turns_ax.legend(loc="upper right", fontsize=8)
+
 	ax3d.set_title("3D Sensor Body")
 	ax3d.set_xlim(-0.06, 0.06)
 	ax3d.set_ylim(-0.06, 0.06)
@@ -417,6 +484,12 @@ def interactive_scrubber_view(result):
 	orientation_x = result["Orientation_X_deg"].to_numpy(dtype=float)
 	orientation_y = result["Orientation_Y_deg"].to_numpy(dtype=float)
 	orientation_z = result["Orientation_Z_deg"].to_numpy(dtype=float)
+	turns_x = result["Turns_X"].to_numpy(dtype=float)
+	turns_y = result["Turns_Y"].to_numpy(dtype=float)
+	turns_z = result["Turns_Z"].to_numpy(dtype=float)
+	abs_turns_x = result["AbsTurns_X"].to_numpy(dtype=float)
+	abs_turns_y = result["AbsTurns_Y"].to_numpy(dtype=float)
+	abs_turns_z = result["AbsTurns_Z"].to_numpy(dtype=float)
 	rotation_matrices = result["RotationMatrix"].to_numpy()
 
 	def update_at_index(index):
@@ -450,7 +523,9 @@ def interactive_scrubber_view(result):
 			f"t={t_now:.2f}s\n"
 			f"X={orientation_x[index]:.1f}°\n"
 			f"Y={orientation_y[index]:.1f}°\n"
-			f"Z={orientation_z[index]:.1f}°"
+			f"Z={orientation_z[index]:.1f}°\n"
+			f"Tn: X={turns_x[index]:.2f} Y={turns_y[index]:.2f} Z={turns_z[index]:.2f}\n"
+			f"Ta: X={abs_turns_x[index]:.2f} Y={abs_turns_y[index]:.2f} Z={abs_turns_z[index]:.2f}"
 		)
 
 		fig.canvas.draw_idle()
