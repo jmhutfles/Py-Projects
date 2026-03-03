@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from tkinter import Tk, filedialog, simpledialog, messagebox
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 import ReadRawData
 
@@ -42,6 +43,30 @@ def _format_timer(seconds_elapsed):
     return f"{minutes:02d}:{seconds:05.2f}"
 
 
+def _pick_landing_time_from_plot(df):
+    clicked_time = []
+
+    def on_click(event):
+        if plt.get_current_fig_manager().toolbar.mode != "":
+            return
+        if event.xdata is None:
+            return
+        clicked_time.append(float(event.xdata))
+        plt.close()
+
+    fig, ax = plt.subplots()
+    ax.plot(df["Time"], df["Altitude MSL (ft)"], color="deepskyblue", linewidth=1.5)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Altitude MSL (ft)")
+    ax.set_title("Zoom/pan as needed, then click LANDING on ABT data")
+    fig.canvas.mpl_connect("button_press_event", on_click)
+    plt.show()
+
+    if not clicked_time:
+        return None
+    return clicked_time[0]
+
+
 def run_special_request_abt_video():
     root = Tk()
     root.withdraw()
@@ -76,10 +101,6 @@ def run_special_request_abt_video():
     min_time = float(df["Time"].min())
     max_time = float(df["Time"].max())
 
-    exit_alt_agl = _prompt_float(root, "Exit Altitude", "Enter exit altitude AGL (ft):", min_value=0)
-    if exit_alt_agl is None:
-        return
-
     exit_time_abt = _prompt_float(
         root,
         "Exit Time",
@@ -96,13 +117,18 @@ def run_special_request_abt_video():
     if full_open_time_abt is None:
         return
 
-    video_exit_time = _prompt_float(
+    landing_data_time = _pick_landing_time_from_plot(df)
+    if landing_data_time is None:
+        messagebox.showerror("No Selection", "No landing point selected on ABT graph.", parent=root)
+        return
+
+    video_landing_time = _prompt_float(
         root,
-        "Video Exit Time",
-        "Enter exit time in VIDEO (s).\nUse 0 if video starts at exit.",
+        "Video Landing Time",
+        "Enter landing time in VIDEO (s).",
         min_value=0,
     )
-    if video_exit_time is None:
+    if video_landing_time is None:
         return
 
     if not (min_time <= exit_time_abt <= max_time):
@@ -117,11 +143,19 @@ def run_special_request_abt_video():
         messagebox.showerror("Invalid Time", "Full-open time must be >= exit time.", parent=root)
         return
 
+    if not (min_time <= landing_data_time <= max_time):
+        messagebox.showerror("Invalid Time", "Selected landing time is out of ABT data range.", parent=root)
+        return
+
     time_values = df["Time"].to_numpy(dtype=float)
     alt_msl_values = df["Altitude MSL (ft)"].to_numpy(dtype=float)
 
+    landing_idx = int(np.abs(time_values - landing_data_time).argmin())
+    ground_elevation_msl_ft = float(alt_msl_values[landing_idx])
     exit_idx = int(np.abs(time_values - exit_time_abt).argmin())
-    exit_alt_msl_ft = float(alt_msl_values[exit_idx])
+    exit_alt_agl_ft = float(alt_msl_values[exit_idx] - ground_elevation_msl_ft)
+
+    sync_offset = video_landing_time - landing_data_time
 
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -148,24 +182,29 @@ def run_special_request_abt_video():
                 break
 
             video_time = frame_idx / fps
-            data_time = exit_time_abt + (video_time - video_exit_time)
+            data_time = video_time - sync_offset
 
             nearest_idx = int(np.abs(time_values - data_time).argmin())
             current_alt_msl_ft = float(alt_msl_values[nearest_idx])
-            current_alt_agl_ft = exit_alt_agl + (current_alt_msl_ft - exit_alt_msl_ft)
+            current_alt_agl_ft = current_alt_msl_ft - ground_elevation_msl_ft
 
             elapsed_since_exit = max(0.0, data_time - exit_time_abt)
             display_clock = min(elapsed_since_exit, max_clock)
+            frozen_time_for_loss = min(max(data_time, exit_time_abt), full_open_time_abt)
+            loss_idx = int(np.abs(time_values - frozen_time_for_loss).argmin())
+            loss_alt_agl_ft = float(alt_msl_values[loss_idx] - ground_elevation_msl_ft)
+            altitude_loss_ft = max(0.0, exit_alt_agl_ft - loss_alt_agl_ft)
 
             info_lines = [
                 f"Altitude AGL: {current_alt_agl_ft:,.0f} ft",
                 f"Time Since Exit: {_format_timer(display_clock)}",
+                f"Altitude Loss: {altitude_loss_ft:,.0f} ft",
             ]
 
             panel_x = 30
             panel_y = 30
             panel_w = 520
-            panel_h = 105
+            panel_h = 145
 
             overlay = frame.copy()
             cv2.rectangle(overlay, (panel_x, panel_y), (panel_x + panel_w, panel_y + panel_h), (30, 30, 30), -1)
