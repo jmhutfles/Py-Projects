@@ -33,6 +33,7 @@ button_specs = [
     ("FlySight Wind Compensation", "WindCompensation.py"),
     ("FlySight Video Overlay", "FlySightVideo.py"),
     ("ABT Video Overlay", "ABTVideo.py"),
+    ("ABT Video Overlay (Special)", "SpecialRequestABTVideo.py"),
     ("IMU Video Overlay", "IMUVideo.py"),
     ("ABT Quick View", "ABT_Quick_View.py"),
     ("IMU Quick View", "IMUQuickView.py"),

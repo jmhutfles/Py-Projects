@@ -33,6 +33,9 @@ def RunTool(Tool, location, root=None):
     elif Tool == "ABTVideo.py":
         from ABTVideo import run_abt_video_overlay
         hide_and_run(run_abt_video_overlay)
+    elif Tool == "SpecialRequestABTVideo.py":
+        from SpecialRequestABTVideo import run_special_request_abt_video
+        hide_and_run(run_special_request_abt_video)
     elif Tool == "IMUQuickView.py":
         from IMUQuickView import IMUQuickView
         hide_and_run(IMUQuickView)
