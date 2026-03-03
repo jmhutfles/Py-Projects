@@ -38,6 +38,25 @@ def convert_gyro_mdps_to_dps(data):
 	return data
 
 
+def _estimate_gyro_bias(gx, gy, gz):
+	"""Estimate gyro bias from lowest-motion samples."""
+	if len(gx) == 0:
+		return 0.0, 0.0, 0.0
+
+	mag = np.sqrt(gx**2 + gy**2 + gz**2)
+	threshold = min(float(np.quantile(mag, 0.2)), 5.0)
+	mask = mag <= threshold
+
+	if np.count_nonzero(mask) < 10:
+		return 0.0, 0.0, 0.0
+
+	return (
+		float(np.median(gx[mask])),
+		float(np.median(gy[mask])),
+		float(np.median(gz[mask])),
+	)
+
+
 def compute_orientation_and_change(data):
 	"""Compute orientation (deg) and orientation change rate (deg/s) for X/Y/Z."""
 	work = data.copy()
@@ -50,6 +69,14 @@ def compute_orientation_and_change(data):
 	gx = work["Gx"].to_numpy(dtype=float)
 	gy = work["Gy"].to_numpy(dtype=float)
 	gz = work["Gz"].to_numpy(dtype=float)
+
+	bias_x, bias_y, bias_z = _estimate_gyro_bias(gx, gy, gz)
+	gx = gx - bias_x
+	gy = gy - bias_y
+	gz = gz - bias_z
+	work["Gx"] = gx
+	work["Gy"] = gy
+	work["Gz"] = gz
 
 	dt = np.diff(time, prepend=time[0])
 	dt[0] = 0.0
@@ -85,6 +112,9 @@ def compute_orientation_and_change(data):
 			"Orientation_X_deg": orientation_x,
 			"Orientation_Y_deg": orientation_y,
 			"Orientation_Z_deg": orientation_z,
+			"AbsOrientation_X_deg": abs_orientation_x,
+			"AbsOrientation_Y_deg": abs_orientation_y,
+			"AbsOrientation_Z_deg": abs_orientation_z,
 			"Turns_X": turns_x,
 			"Turns_Y": turns_y,
 			"Turns_Z": turns_z,
@@ -94,11 +124,17 @@ def compute_orientation_and_change(data):
 			"Change_X_deg_per_s": change_x,
 			"Change_Y_deg_per_s": change_y,
 			"Change_Z_deg_per_s": change_z,
+			"GyroBias_X_deg_per_s": np.full_like(time, bias_x, dtype=float),
+			"GyroBias_Y_deg_per_s": np.full_like(time, bias_y, dtype=float),
+			"GyroBias_Z_deg_per_s": np.full_like(time, bias_z, dtype=float),
 		}
 	)
 
 	rotation_matrices = _accumulate_rotation_matrices(work)
 	result["RotationMatrix"] = pd.Series(rotation_matrices, index=result.index, dtype=object)
+	z_align = np.array([rot[2, 2] for rot in rotation_matrices], dtype=float)
+	z_align = np.clip(z_align, -1.0, 1.0)
+	result["ConeAngle_deg"] = np.degrees(np.arccos(z_align))
 
 	return result
 
@@ -133,21 +169,27 @@ def _accumulate_rotation_matrices(work):
 				])
 				drot = np.eye(3) + np.sin(theta * dt[idx]) * K + (1 - np.cos(theta * dt[idx])) * (K @ K)
 				rot = drot @ rot
+				u, _, vh = np.linalg.svd(rot)
+				rot = u @ vh
+				if np.linalg.det(rot) < 0:
+					u[:, -1] *= -1
+					rot = u @ vh
 
 	return rotation_list
 
 
 def plot_orientation_quick_view(result):
-	"""Plot 3 orientation plots and 3 orientation-change plots."""
+	"""Plot 6 core graphs plus cone-angle summary graph."""
 	time = result["Time"].to_numpy()
 
-	fig, axes = plt.subplots(2, 3, figsize=(16, 8), sharex=True)
+	fig, axes = plt.subplots(3, 3, figsize=(18, 11), sharex=True)
+	axes = axes.flatten()
 	fig.suptitle("IMU Orientation Quick View", fontsize=14)
 
 	top_plots = [
-		("Orientation_X_deg", "Turns_X", "AbsTurns_X", "X Orientation (deg)", "tab:red"),
-		("Orientation_Y_deg", "Turns_Y", "AbsTurns_Y", "Y Orientation (deg)", "tab:green"),
-		("Orientation_Z_deg", "Turns_Z", "AbsTurns_Z", "Z Orientation (deg)", "tab:blue"),
+		("Orientation_X_deg", "Turns_X", "X Orientation (deg)", "tab:red"),
+		("Orientation_Y_deg", "Turns_Y", "Y Orientation (deg)", "tab:green"),
+		("Orientation_Z_deg", "Turns_Z", "Z Orientation (deg)", "tab:blue"),
 	]
 
 	bottom_plots = [
@@ -156,13 +198,14 @@ def plot_orientation_quick_view(result):
 		("Change_Z_deg_per_s", "dZ/dt (deg/s)", "tab:blue"),
 	]
 
-	for idx, (column, turns_column, abs_turns_column, ylabel, color) in enumerate(top_plots):
-		axes[0, idx].plot(time, result[column], color=color, linewidth=1.2)
-		axes[0, idx].set_title(ylabel)
-		axes[0, idx].set_ylabel(ylabel)
-		axes[0, idx].grid(True, alpha=0.3)
+	for idx, (column, turns_column, ylabel, color) in enumerate(top_plots):
+		ax = axes[idx]
+		ax.plot(time, result[column], color=color, linewidth=1.2)
+		ax.set_title(ylabel)
+		ax.set_ylabel(ylabel)
+		ax.grid(True, alpha=0.3)
 
-		turns_ax = axes[0, idx].twinx()
+		turns_ax = ax.twinx()
 		net_turns_line, = turns_ax.plot(
 			time,
 			result[turns_column],
@@ -172,25 +215,28 @@ def plot_orientation_quick_view(result):
 			alpha=0.8,
 			label="Net Turns",
 		)
-		abs_turns_line, = turns_ax.plot(
-			time,
-			result[abs_turns_column],
-			color="tab:orange",
-			linestyle=":",
-			linewidth=1.1,
-			alpha=0.9,
-			label="Abs Turns",
-		)
 		turns_ax.set_ylabel("Turns", color="tab:purple")
 		turns_ax.tick_params(axis="y", colors="tab:purple")
-		turns_ax.legend(handles=[net_turns_line, abs_turns_line], loc="upper right", fontsize=8)
+		turns_ax.legend(handles=[net_turns_line], loc="upper right", fontsize=8)
 
 	for idx, (column, ylabel, color) in enumerate(bottom_plots):
-		axes[1, idx].plot(time, result[column], color=color, linewidth=1.2)
-		axes[1, idx].set_title(ylabel)
-		axes[1, idx].set_xlabel("Time (s)")
-		axes[1, idx].set_ylabel(ylabel)
-		axes[1, idx].grid(True, alpha=0.3)
+		ax = axes[3 + idx]
+		ax.plot(time, result[column], color=color, linewidth=1.2)
+		ax.set_title(ylabel)
+		ax.set_xlabel("Time (s)")
+		ax.set_ylabel(ylabel)
+		ax.grid(True, alpha=0.3)
+
+	ax_summary = axes[6]
+	ax_summary.plot(time, result["ConeAngle_deg"], color="tab:orange", linewidth=1.4, label="Cone Angle [deg]")
+	ax_summary.set_title("Cone Angle Summary")
+	ax_summary.set_xlabel("Time (s)")
+	ax_summary.set_ylabel("Angle (deg)")
+	ax_summary.grid(True, alpha=0.3)
+	ax_summary.legend(loc="upper right", fontsize=8)
+
+	axes[7].axis("off")
+	axes[8].axis("off")
 
 	plt.tight_layout()
 	plt.show()
@@ -228,6 +274,7 @@ def animate_sensor_orientation(result, max_frames=1200):
 	orientation_x = result["Orientation_X_deg"].to_numpy(dtype=float)
 	orientation_y = result["Orientation_Y_deg"].to_numpy(dtype=float)
 	orientation_z = result["Orientation_Z_deg"].to_numpy(dtype=float)
+	rotation_matrices = result["RotationMatrix"].to_numpy()
 
 	n_samples = len(result)
 	if n_samples == 0:
@@ -304,11 +351,7 @@ def animate_sensor_orientation(result, max_frames=1200):
 		if not plt.fignum_exists(fig.number):
 			break
 
-		rot = _rotation_matrix_xyz(
-			orientation_x[idx],
-			orientation_y[idx],
-			orientation_z[idx],
-		)
+		rot = rotation_matrices[idx]
 
 		rot_vertices = (rot @ local_vertices.T).T
 		face_vertices = [[rot_vertices[i] for i in face] for face in faces_idx]
@@ -561,19 +604,7 @@ def main():
 		result = compute_orientation_and_change(data)
 
 		print(f"Loaded {len(result)} IMU samples from {len(paths)} file(s).")
-		print("Choose view:")
-		print("1. Orientation/change plots")
-		print("2. One-pane scrubber (2D + 3D + slider)")
-		print("3. Both")
-		choice = input("Enter choice (1/2/3): ").strip()
-
-		if choice == "2":
-			interactive_scrubber_view(result)
-		elif choice == "3":
-			plot_orientation_quick_view(result)
-			interactive_scrubber_view(result)
-		else:
-			plot_orientation_quick_view(result)
+		plot_orientation_quick_view(result)
 
 	except Exception as error:
 		messagebox.showerror("Orientation Quick View Error", str(error))
