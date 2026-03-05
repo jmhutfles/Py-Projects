@@ -173,6 +173,8 @@ def run_special_request_abt_video():
 
     max_clock = full_open_time_abt - exit_time_abt
     font = cv2.FONT_HERSHEY_SIMPLEX
+    displayed_rod_ft_s = None
+    last_rod_update_data_time = None
 
     frame_idx = 0
     with tqdm(total=total_frames, desc="Rendering Special Request ABT Overlay") as pbar:
@@ -194,6 +196,46 @@ def run_special_request_abt_video():
             loss_idx = int(np.abs(time_values - frozen_time_for_loss).argmin())
             loss_alt_agl_ft = float(alt_msl_values[loss_idx] - ground_elevation_msl_ft)
             altitude_loss_ft = max(0.0, exit_alt_agl_ft - loss_alt_agl_ft)
+            parachute_open = data_time >= full_open_time_abt
+
+            current_rod_ft_s = None
+            if parachute_open and len(time_values) > 1:
+                should_update_rod = (
+                    displayed_rod_ft_s is None
+                    or last_rod_update_data_time is None
+                    or (data_time - last_rod_update_data_time) >= 0.5
+                )
+
+                if should_update_rod:
+                    window_start = data_time
+                    window_end = data_time + 1.0
+                    idx0 = int(np.searchsorted(time_values, window_start, side="left"))
+                    idx1 = int(np.searchsorted(time_values, window_end, side="right")) - 1
+
+                    if idx0 >= len(time_values):
+                        idx0 = len(time_values) - 1
+                    if idx1 < 0:
+                        idx1 = 0
+
+                    if idx1 <= idx0:
+                        if nearest_idx <= 0:
+                            idx0, idx1 = 0, 1
+                        elif nearest_idx >= len(time_values) - 1:
+                            idx0, idx1 = len(time_values) - 2, len(time_values) - 1
+                        else:
+                            idx0, idx1 = nearest_idx - 1, nearest_idx + 1
+
+                    dt = float(time_values[idx1] - time_values[idx0])
+                    if dt > 0:
+                        d_alt = float(alt_msl_values[idx1] - alt_msl_values[idx0])
+                        vertical_speed_ft_s = d_alt / dt
+                        displayed_rod_ft_s = max(0.0, -vertical_speed_ft_s)
+                    last_rod_update_data_time = data_time
+
+                current_rod_ft_s = displayed_rod_ft_s
+            else:
+                displayed_rod_ft_s = None
+                last_rod_update_data_time = None
 
             info_lines = [
                 f"Altitude AGL: {current_alt_agl_ft:,.0f} ft",
@@ -201,10 +243,13 @@ def run_special_request_abt_video():
                 f"Altitude Loss: {altitude_loss_ft:,.0f} ft",
             ]
 
+            if current_rod_ft_s is not None:
+                info_lines.append(f"Current ROD: {current_rod_ft_s:.0f} ft/s")
+
             panel_x = 30
             panel_y = 30
             panel_w = 520
-            panel_h = 145
+            panel_h = 65 + (len(info_lines) * 40)
 
             overlay = frame.copy()
             cv2.rectangle(overlay, (panel_x, panel_y), (panel_x + panel_w, panel_y + panel_h), (30, 30, 30), -1)
