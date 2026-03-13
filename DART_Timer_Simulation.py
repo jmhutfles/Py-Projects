@@ -73,7 +73,7 @@ class DARTTimerSimulationGUI:
         vehicle_params = [
             ('altitude_msl', 'Drop Altitude MSL', 'ft'),
             ('dart_weight', 'DART Weight', 'lbs'),
-            ('freefall_drag_area', 'Freefall Drag Area x Cd', 'sq ft'),
+            ('freefall_drag_area', 'Freefall Drag Area', 'sq ft'),
             ('ip_elevation', 'IP Elevation', 'ft MSL')
         ]
         
@@ -603,8 +603,9 @@ class DARTTimerSimulationGUI:
                            label=f'Timer Setting ({results["deployment_time"]:.1f}s)', linewidth=2)
             # Mark deployment point
             dep_idx = np.where(time_data <= results['deployment_time'])[0][-1]
+            deploy_altitude_agl = results['altitude'][dep_idx] - ip_elevation
             self.ax1.plot(time_data[dep_idx], results['altitude'][dep_idx], 'ro', markersize=10, 
-                         label=f'Deploy Alt: {results["altitude"][dep_idx]:.0f} ft')
+                         label=f'Deploy Altitude: {deploy_altitude_agl:.0f} ft AGL')
         self.ax1.set_xlabel('Time (s)', fontsize=12)
         self.ax1.set_ylabel('Altitude (ft MSL)', fontsize=12)
         self.ax1.set_title('DART Altitude Profile', fontsize=14, fontweight='bold')
