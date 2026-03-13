@@ -26,7 +26,7 @@ class DARTTimerSimulationGUI:
             'aircraft_horizontal_speed': 120, # Aircraft speed (KIAS)
             
             # Test parameters
-            'desired_deployment_speed': 150,  # Target deployment speed (KIAS)
+            'desired_deployment_speed': 150,  # Target deployment speed (KTAS)
             
             # Simulation parameters
             'time_step': 0.1,                # Simulation time step (seconds)
@@ -118,7 +118,7 @@ class DARTTimerSimulationGUI:
         test_frame.pack(fill=tk.X, pady=(0, 10))
         
         test_params = [
-            ('desired_deployment_speed', 'Target Deployment Speed', 'KIAS'),
+            ('desired_deployment_speed', 'Target Deployment Speed', 'KTAS'),
             ('time_step', 'Simulation Time Step', 'sec')
         ]
         
@@ -342,17 +342,15 @@ class DARTTimerSimulationGUI:
         deployment_altitude = None
         deployment_speed_sdsl = None
         deployment_speed_kias = None
+        deployment_speed_ktas = None
         
         # Track speed trend to handle both acceleration and deceleration
         previous_speed = 0
         speed_trend_samples = []
         target_crossed = False
         
-        # Convert target KIAS to equivalent SDSL speed for comparison
-        target_speed_kias = params['desired_deployment_speed']
-        
-        # We'll compare against SDSL speed during simulation
-        # KIAS at altitude will be converted to SDSL for comparison
+        # Target deployment speed is entered directly as true airspeed.
+        target_speed_ktas = params['desired_deployment_speed']
         
         # Simulation loop
         iteration_count = 0
@@ -401,7 +399,7 @@ class DARTTimerSimulationGUI:
             # Check for timer trigger point (handle both acceleration and deceleration)
             if not timer_triggered:
                 # Track speed trend over last few samples
-                speed_trend_samples.append(velocity_kts)
+                speed_trend_samples.append(true_airspeed_kts)
                 if len(speed_trend_samples) > 10:  # Keep last 10 samples
                     speed_trend_samples.pop(0)
                 
@@ -412,32 +410,35 @@ class DARTTimerSimulationGUI:
                     is_decelerating = recent_trend < -0.1  # Decelerating
                     
                     # Check for target speed crossing
-                    if is_accelerating and velocity_kts >= target_speed_kias and previous_speed < target_speed_kias:
+                    if is_accelerating and true_airspeed_kts >= target_speed_ktas and previous_speed < target_speed_ktas:
                         # Accelerating and just crossed target speed upward
                         timer_triggered = True
                         deployment_time = current_time
                         deployment_altitude = current_alt
                         deployment_speed_sdsl = sdsl_speed_kts
                         deployment_speed_kias = velocity_kts
+                        deployment_speed_ktas = true_airspeed_kts
                         target_crossed = True
-                    elif is_decelerating and velocity_kts <= target_speed_kias and previous_speed > target_speed_kias:
+                    elif is_decelerating and true_airspeed_kts <= target_speed_ktas and previous_speed > target_speed_ktas:
                         # Decelerating and just crossed target speed downward
                         timer_triggered = True
                         deployment_time = current_time
                         deployment_altitude = current_alt
                         deployment_speed_sdsl = sdsl_speed_kts
                         deployment_speed_kias = velocity_kts
+                        deployment_speed_ktas = true_airspeed_kts
                         target_crossed = True
-                    elif not is_accelerating and not is_decelerating and abs(velocity_kts - target_speed_kias) < 1.0:
+                    elif not is_accelerating and not is_decelerating and abs(true_airspeed_kts - target_speed_ktas) < 1.0:
                         # Near steady state at target speed
                         timer_triggered = True
                         deployment_time = current_time
                         deployment_altitude = current_alt
                         deployment_speed_sdsl = sdsl_speed_kts
                         deployment_speed_kias = velocity_kts
+                        deployment_speed_ktas = true_airspeed_kts
                         target_crossed = True
                 
-                previous_speed = velocity_kts
+                previous_speed = true_airspeed_kts
             
             # Calculate drag force - ALWAYS use freefall characteristics
             # (no parachute deployment, just mark the timer point)
@@ -498,9 +499,10 @@ class DARTTimerSimulationGUI:
             'deployment_altitude': deployment_altitude,
             'deployment_speed_sdsl': deployment_speed_sdsl if 'deployment_speed_sdsl' in locals() else None,
             'deployment_speed_kias': deployment_speed_kias if 'deployment_speed_kias' in locals() else None,
+            'deployment_speed_ktas': deployment_speed_ktas if 'deployment_speed_ktas' in locals() else None,
             'target_crossed': target_crossed if 'target_crossed' in locals() else False,
             'timer_setting': timer_setting,
-            'target_speed_kias': target_speed_kias,
+            'target_speed_ktas': target_speed_ktas,
             'params': params.copy()
         }
     
@@ -612,15 +614,15 @@ class DARTTimerSimulationGUI:
         # Tab 2: Speed Profile
         self.ax2.plot(time_data[:-1], results['indicated_speeds'], 'b-', linewidth=2, label='Indicated Speed (KIAS)')
         self.ax2.plot(time_data[:-1], results['true_airspeeds'], 'g-', linewidth=2, label='True Airspeed (KTAS)')
-        self.ax2.axhline(y=results['target_speed_kias'], color='orange', linestyle=':', linewidth=3, 
-                        label=f'Target: {results["target_speed_kias"]:.0f} KIAS')
+        self.ax2.axhline(y=results['target_speed_ktas'], color='orange', linestyle=':', linewidth=3, 
+                        label=f'Target: {results["target_speed_ktas"]:.0f} KTAS')
         if results['deployment_time']:
             self.ax2.axvline(x=results['deployment_time'], color='r', linestyle='--', linewidth=2, 
                            label=f'Timer Setting ({results["deployment_time"]:.1f}s)')
             # Mark deployment speed
             dep_idx = np.where(time_data[:-1] <= results['deployment_time'])[0][-1]
-            self.ax2.plot(time_data[dep_idx], results['indicated_speeds'][dep_idx], 'ro', markersize=10, 
-                         label=f'Deploy Speed: {results["indicated_speeds"][dep_idx]:.1f} KIAS')
+            self.ax2.plot(time_data[dep_idx], results['true_airspeeds'][dep_idx], 'ro', markersize=10, 
+                         label=f'Deploy Speed: {results["true_airspeeds"][dep_idx]:.1f} KTAS')
         self.ax2.set_xlabel('Time (s)', fontsize=12)
         self.ax2.set_ylabel('Speed (knots)', fontsize=12)
         self.ax2.set_title('DART Speed Profile', fontsize=14, fontweight='bold')
@@ -692,15 +694,16 @@ class DARTTimerSimulationGUI:
             trigger_altitude_agl = results['deployment_altitude'] - results['params']['ip_elevation']
             self.results_text.insert(tk.END, f"   • Trigger Altitude: {trigger_altitude_agl:.0f} ft AGL\n")
             
-            self.results_text.insert(tk.END, f"   • Trigger Speed: {results.get('deployment_speed_kias', 0):.1f} KIAS\n")
-            self.results_text.insert(tk.END, f"   • Target Speed: {results['target_speed_kias']:.0f} KIAS\n\n")
+            self.results_text.insert(tk.END, f"   • Trigger Speed: {results.get('deployment_speed_ktas', 0):.1f} KTAS\n")
+            self.results_text.insert(tk.END, f"   • Trigger Indicated Speed: {results.get('deployment_speed_kias', 0):.1f} KIAS\n")
+            self.results_text.insert(tk.END, f"   • Target Speed: {results['target_speed_ktas']:.0f} KTAS\n\n")
         else:
             self.results_text.insert(tk.END, "❌ TIMER CALCULATION FAILED!\n")
             self.results_text.insert(tk.END, "   Target deployment speed not reached or crossed.\n")
-            max_kias = np.max(results['indicated_speeds']) if len(results['indicated_speeds']) > 0 else 0
-            min_kias = np.min(results['indicated_speeds']) if len(results['indicated_speeds']) > 0 else 0
-            self.results_text.insert(tk.END, f"   Speed range: {min_kias:.1f} - {max_kias:.1f} KIAS\n")
-            self.results_text.insert(tk.END, f"   Target speed required: {results['target_speed_kias']:.0f} KIAS\n\n")
+            max_ktas = np.max(results['true_airspeeds']) if len(results['true_airspeeds']) > 0 else 0
+            min_ktas = np.min(results['true_airspeeds']) if len(results['true_airspeeds']) > 0 else 0
+            self.results_text.insert(tk.END, f"   Speed range: {min_ktas:.1f} - {max_ktas:.1f} KTAS\n")
+            self.results_text.insert(tk.END, f"   Target speed required: {results['target_speed_ktas']:.0f} KTAS\n\n")
         
         # Flight Performance Summary
         self.results_text.insert(tk.END, f"🚀 FREE FALL IMPACT ANALYSIS:\n")
@@ -708,12 +711,12 @@ class DARTTimerSimulationGUI:
         final_alt = results['altitude'][-1]
         final_alt_agl = final_alt - results['params']['ip_elevation']
         max_range = results['x_position'][-1]
-        final_speed = results['indicated_speeds'][-1] if len(results['indicated_speeds']) > 0 else 0
+        final_speed = results['true_airspeeds'][-1] if len(results['true_airspeeds']) > 0 else 0
         max_indicated_speed = np.max(results['indicated_speeds']) if len(results['indicated_speeds']) > 0 else 0
         max_true_airspeed = np.max(results['true_airspeeds']) if len(results['true_airspeeds']) > 0 else 0
         
         self.results_text.insert(tk.END, f"   • Total Fall Time: {final_time:.1f} s\n")
-        self.results_text.insert(tk.END, f"   • Impact Speed: {final_speed:.1f} KIAS (NO PARACHUTE!)\n")
+        self.results_text.insert(tk.END, f"   • Impact Speed: {final_speed:.1f} KTAS (NO PARACHUTE!)\n")
         self.results_text.insert(tk.END, f"   • Final Altitude: {final_alt_agl:.0f} ft AGL\n")
         self.results_text.insert(tk.END, f"   • Horizontal Range: {max_range:.0f} ft ({max_range/5280:.1f} miles)\n")
         self.results_text.insert(tk.END, f"   • Max Indicated Speed: {max_indicated_speed:.1f} KIAS\n")
